@@ -10,14 +10,11 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.offlinejournal.data.local.AppContainer
-import com.offlinejournal.presentation.screens.CategoriesScreen
+import com.offlinejournal.presentation.screens.CategorySelectScreen
 import com.offlinejournal.presentation.screens.HomeScreen
 import com.offlinejournal.presentation.screens.NoteDetailScreen
 import com.offlinejournal.presentation.screens.NoteEditorScreen
 import com.offlinejournal.presentation.screens.ReminderEditorScreen
-import com.offlinejournal.presentation.screens.RemindersScreen
-import com.offlinejournal.presentation.screens.ReportsScreen
-import com.offlinejournal.presentation.screens.SearchScreen
 
 @Composable
 fun OfflineJournalNavHost(container: AppContainer) {
@@ -31,20 +28,35 @@ fun OfflineJournalNavHost(container: AppContainer) {
             composable(Screen.Home.route) {
                 HomeScreen(
                     container = container,
-                    onNewNote = { navController.navigate(Screen.NewNote.route) },
+                    onNewNote = { navController.navigate(Screen.SelectCategory.route) },
+                    onNewReminder = { navController.navigate(Screen.NewReminder.route) },
                     onNoteClick = { id -> navController.navigate(Screen.NoteDetail.createRoute(id)) },
-                    onCategories = { navController.navigate(Screen.Categories.route) },
-                    onReminders = { navController.navigate(Screen.Reminders.route) },
-                    onReports = { navController.navigate(Screen.Reports.route) },
-                    onSearch = { navController.navigate(Screen.Search.route) }
+                    onEditReminder = { id -> navController.navigate(Screen.EditReminder.createRoute(id)) }
                 )
             }
 
-            composable(Screen.NewNote.route) {
-                NoteEditorScreen(
+            composable(Screen.SelectCategory.route) {
+                CategorySelectScreen(
                     container = container,
                     onBack = { navController.popBackStack() },
-                    onSaved = { navController.popBackStack() }
+                    onCategorySelected = { categoryId ->
+                        navController.navigate(Screen.NewNote.createRoute(categoryId))
+                    }
+                )
+            }
+
+            composable(
+                route = Screen.NewNote.route,
+                arguments = listOf(navArgument("categoryId") { type = NavType.LongType })
+            ) { backStackEntry ->
+                val categoryId = backStackEntry.arguments?.getLong("categoryId") ?: return@composable
+                NoteEditorScreen(
+                    container = container,
+                    categoryId = categoryId,
+                    onBack = { navController.popBackStack() },
+                    onSaved = {
+                        navController.popBackStack(Screen.Home.route, inclusive = false)
+                    }
                 )
             }
 
@@ -57,9 +69,7 @@ fun OfflineJournalNavHost(container: AppContainer) {
                     container = container,
                     noteId = noteId,
                     onBack = { navController.popBackStack() },
-                    onEdit = {
-                        navController.navigate("edit_note/$noteId")
-                    },
+                    onEdit = { navController.navigate("edit_note/$noteId") },
                     onDeleted = { navController.popBackStack() }
                 )
             }
@@ -74,22 +84,6 @@ fun OfflineJournalNavHost(container: AppContainer) {
                     noteId = noteId,
                     onBack = { navController.popBackStack() },
                     onSaved = { navController.popBackStack() }
-                )
-            }
-
-            composable(Screen.Categories.route) {
-                CategoriesScreen(
-                    container = container,
-                    onBack = { navController.popBackStack() }
-                )
-            }
-
-            composable(Screen.Reminders.route) {
-                RemindersScreen(
-                    container = container,
-                    onBack = { navController.popBackStack() },
-                    onNewReminder = { navController.navigate(Screen.NewReminder.route) },
-                    onEditReminder = { id -> navController.navigate(Screen.EditReminder.createRoute(id)) }
                 )
             }
 
@@ -111,21 +105,6 @@ fun OfflineJournalNavHost(container: AppContainer) {
                     reminderId = reminderId,
                     onBack = { navController.popBackStack() },
                     onSaved = { navController.popBackStack() }
-                )
-            }
-
-            composable(Screen.Reports.route) {
-                ReportsScreen(
-                    container = container,
-                    onBack = { navController.popBackStack() }
-                )
-            }
-
-            composable(Screen.Search.route) {
-                SearchScreen(
-                    container = container,
-                    onBack = { navController.popBackStack() },
-                    onNoteClick = { id -> navController.navigate(Screen.NoteDetail.createRoute(id)) }
                 )
             }
         }

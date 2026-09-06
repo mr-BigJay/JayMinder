@@ -31,10 +31,13 @@ data class NoteEditorUiState(
 
 class NoteEditorViewModel(
     private val container: AppContainer,
-    private val existingNoteId: Long? = null
+    private val existingNoteId: Long? = null,
+    private val initialCategoryId: Long? = null
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(NoteEditorUiState())
+    private val _uiState = MutableStateFlow(
+        NoteEditorUiState(categoryId = initialCategoryId)
+    )
     val uiState: StateFlow<NoteEditorUiState> = _uiState.asStateFlow()
 
     init {
@@ -255,11 +258,12 @@ class NoteEditorViewModel(
 
     class Factory(
         private val container: AppContainer,
-        private val noteId: Long? = null
+        private val noteId: Long? = null,
+        private val categoryId: Long? = null
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return NoteEditorViewModel(container, noteId) as T
+            return NoteEditorViewModel(container, noteId, categoryId) as T
         }
     }
 }
