@@ -1,0 +1,18 @@
+*.iml
+.gradle
+/local.properties
+local.properties
+/.idea/
+.DS_Store
+/build
+app/build/
+/captures
+.externalNativeBuild
+.cxx
+*.apk
+*.ap_
+*.aab
+app/schemas/
+
+# Vosk model (large binary - download separately)
+app/src/main/assets/model/vosk-model-small-fa-0.5/
