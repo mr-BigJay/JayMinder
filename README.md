@@ -32,16 +32,11 @@ util/           → تقویم جلالی، فرمت فارسی
 - Android SDK 34
 - دستگاه یا شبیه‌ساز اندروید 8.0+ (API 26)
 
-## نصب مدل Vosk فارسی
+## نصب مدل Vosk فارسی (یک‌بار)
 
-قبل از build، مدل تشخیص گفتار را نصب کنید:
+برای «تبدیل به متن» آفلاین، **اولین بار** داخل اپ روی **«دانلود مدل تشخیص گفتار»** بزنید (~۴۵ مگابایت). پس از نصب، کاملاً آفلاین کار می‌کند.
 
-1. دانلود: [vosk-model-small-fa-0.5](https://alphacephei.com/vosk/models/vosk-model-small-fa-0.5.zip)
-2. استخراج در: `app/src/main/assets/model/vosk-model-small-fa-0.5/`
-
-جزئیات بیشتر: `app/src/main/assets/model/README.md`
-
-> بدون مدل، ضبط صدا و یادداشت متنی کار می‌کند؛ فقط «تبدیل به متن» غیرفعال است.
+یا برای build خودتان مدل را در `app/src/main/assets/model/vosk-model-small-fa-0.5/` قرار دهید.
 
 ## Build و Run
 

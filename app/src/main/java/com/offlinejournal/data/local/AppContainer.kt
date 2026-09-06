@@ -9,6 +9,7 @@ import com.offlinejournal.service.audio.AudioRecorderManager
 import com.offlinejournal.service.reminder.NotificationHelper
 import com.offlinejournal.service.reminder.ReminderScheduler
 import com.offlinejournal.service.speech.SpeechToTextEngine
+import com.offlinejournal.service.speech.VoskModelManager
 import com.offlinejournal.service.speech.VoskSpeechToTextEngine
 
 class AppContainer(context: Context) {
@@ -27,7 +28,8 @@ class AppContainer(context: Context) {
     val reminderRepository = ReminderRepository(database.reminderDao(), reminderScheduler)
 
     val audioRecorderManager = AudioRecorderManager(appContext)
-    val speechToTextEngine: SpeechToTextEngine = VoskSpeechToTextEngine(appContext)
+    val voskModelManager = VoskModelManager(appContext)
+    val speechToTextEngine: SpeechToTextEngine = VoskSpeechToTextEngine(appContext, voskModelManager)
 
     init {
         NotificationHelper.createNotificationChannel(appContext)

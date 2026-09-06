@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -47,6 +48,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.offlinejournal.data.local.AppContainer
 import com.offlinejournal.presentation.components.JournalTopBar
 import com.offlinejournal.presentation.viewmodel.NoteEditorViewModel
+import com.offlinejournal.service.speech.ModelInstallState
 import com.offlinejournal.service.speech.SpeechEngineState
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -117,6 +119,58 @@ fun NoteEditorScreen(
                 style = MaterialTheme.typography.titleMedium
             )
 
+            when (val modelState = uiState.modelState) {
+                is ModelInstallState.NotInstalled -> {
+                    Text(
+                        text = "برای تبدیل صدا به متن آفلاین، مدل فارسی را یک‌بار دانلود کنید (~۴۵ مگابایت). بعد از آن کاملاً آفلاین کار می‌کند.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
+                    Button(onClick = viewModel::downloadSpeechModel) {
+                        Text("دانلود مدل تشخیص گفتار")
+                    }
+                }
+                is ModelInstallState.Checking -> {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp).padding(end = 8.dp))
+                        Text("بررسی مدل…")
+                    }
+                }
+                is ModelInstallState.Downloading -> {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(
+                            progress = { modelState.progress },
+                            modifier = Modifier.size(20.dp).padding(end = 8.dp)
+                        )
+                        Text(modelState.message)
+                    }
+                }
+                is ModelInstallState.Installed -> {
+                    Text(
+                        text = "مدل آفلاین فارسی نصب است — تشخیص حین ضبط فعال است.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                is ModelInstallState.Error -> {
+                    Text(text = modelState.message, color = MaterialTheme.colorScheme.error)
+                    Button(onClick = viewModel::downloadSpeechModel) {
+                        Text("تلاش مجدد")
+                    }
+                }
+            }
+
+            if (uiState.isRecording && uiState.transcription.isNotBlank()) {
+                OutlinedTextField(
+                    value = uiState.transcription,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("متن زنده (حین ضبط)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2
+                )
+            }
+
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -180,6 +234,12 @@ fun NoteEditorScreen(
                         Text("در حال بارگذاری مدل تشخیص گفتار...")
                     }
                 }
+                is SpeechEngineState.Transcribing -> {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(modifier = Modifier.padding(end = 8.dp))
+                        Text("در حال تبدیل صدا به متن…")
+                    }
+                }
                 is SpeechEngineState.Error -> {
                     Text(
                         text = speechState.message,
@@ -189,7 +249,7 @@ fun NoteEditorScreen(
                 else -> {}
             }
 
-            if (uiState.transcription.isNotBlank()) {
+            if (uiState.transcription.isNotBlank() && !uiState.isRecording) {
                 OutlinedTextField(
                     value = uiState.transcription,
                     onValueChange = viewModel::updateTranscription,

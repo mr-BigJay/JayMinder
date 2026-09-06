@@ -1,11 +1,13 @@
 package com.offlinejournal.service.speech
 
 import android.content.Context
+import android.media.AudioFormat
 import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import kotlin.math.roundToInt
 
 internal object AudioDecoder {
     fun decodeToPcm16(context: Context, filePath: String, sampleRate: Int): ByteArray {
@@ -32,6 +34,17 @@ internal object AudioDecoder {
         val mime = format.getString(MediaFormat.KEY_MIME) ?: run {
             extractor.release()
             return byteArrayOf()
+        }
+
+        val sourceSampleRate = if (format.containsKey(MediaFormat.KEY_SAMPLE_RATE)) {
+            format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+        } else {
+            sampleRate
+        }
+        val channelCount = if (format.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) {
+            format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+        } else {
+            1
         }
 
         val codec = MediaCodec.createDecoderByType(mime)
@@ -77,15 +90,56 @@ internal object AudioDecoder {
         codec.release()
         extractor.release()
 
-        val totalSize = outputChunks.sumOf { it.size }
+        val pcm = concatChunks(outputChunks)
+        val mono = if (channelCount > 1) downmixToMono(pcm, channelCount) else pcm
+        return if (sourceSampleRate != sampleRate) {
+            resamplePcm16(mono, sourceSampleRate, sampleRate)
+        } else {
+            mono
+        }
+    }
+
+    private fun concatChunks(chunks: List<ByteArray>): ByteArray {
+        val totalSize = chunks.sumOf { it.size }
         val result = ByteArray(totalSize)
         var offset = 0
-        for (chunk in outputChunks) {
+        for (chunk in chunks) {
             System.arraycopy(chunk, 0, result, offset, chunk.size)
             offset += chunk.size
         }
-
-        // Resample to 16kHz mono 16-bit if needed (simplified: return as-is for Vosk)
         return result
+    }
+
+    private fun downmixToMono(pcm: ByteArray, channels: Int): ByteArray {
+        val shortCount = pcm.size / 2
+        val frameCount = shortCount / channels
+        val output = ByteArray(frameCount * 2)
+        val buffer = ByteBuffer.wrap(pcm).order(ByteOrder.LITTLE_ENDIAN)
+
+        for (frame in 0 until frameCount) {
+            var sum = 0
+            for (ch in 0 until channels) {
+                sum += buffer.getShort((frame * channels + ch) * 2).toInt()
+            }
+            val avg = (sum / channels).toShort()
+            output[frame * 2] = (avg.toInt() and 0xFF).toByte()
+            output[frame * 2 + 1] = ((avg.toInt() shr 8) and 0xFF).toByte()
+        }
+        return output
+    }
+
+    private fun resamplePcm16(pcm: ByteArray, fromRate: Int, toRate: Int): ByteArray {
+        if (fromRate == toRate || pcm.isEmpty()) return pcm
+        val inputSamples = pcm.size / 2
+        val outputSamples = ((inputSamples.toLong() * toRate) / fromRate).toInt().coerceAtLeast(1)
+        val input = ByteBuffer.wrap(pcm).order(ByteOrder.LITTLE_ENDIAN)
+        val output = ByteArray(outputSamples * 2)
+        val outBuffer = ByteBuffer.wrap(output).order(ByteOrder.LITTLE_ENDIAN)
+
+        for (i in 0 until outputSamples) {
+            val srcIndex = (i.toDouble() * fromRate / toRate).roundToInt().coerceIn(0, inputSamples - 1)
+            outBuffer.putShort(input.getShort(srcIndex * 2))
+        }
+        return output
     }
 }

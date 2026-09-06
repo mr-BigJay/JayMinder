@@ -5,15 +5,13 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.offlinejournal.data.local.AppContainer
 import com.offlinejournal.domain.model.Category
-import com.offlinejournal.domain.model.Note
+import com.offlinejournal.service.speech.ModelInstallState
 import com.offlinejournal.service.speech.SpeechEngineState
-import com.offlinejournal.util.TehranTime
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.io.File
 
 data class NoteEditorUiState(
     val title: String = "",
@@ -25,6 +23,7 @@ data class NoteEditorUiState(
     val audioFilePath: String? = null,
     val isTranscribing: Boolean = false,
     val speechState: SpeechEngineState = SpeechEngineState.NotInitialized,
+    val modelState: ModelInstallState = ModelInstallState.NotInstalled,
     val isSaving: Boolean = false,
     val errorMessage: String? = null,
     val savedNoteId: Long? = null
@@ -48,11 +47,22 @@ class NoteEditorViewModel(
         viewModelScope.launch {
             container.speechToTextEngine.state.collect { state ->
                 _uiState.update {
+                    val transcription = when (state) {
+                        is SpeechEngineState.LivePartial -> state.text
+                        else -> it.transcription
+                    }
                     it.copy(
                         speechState = state,
+                        transcription = if (state is SpeechEngineState.LivePartial) transcription else it.transcription,
                         isTranscribing = state is SpeechEngineState.Transcribing
                     )
                 }
+            }
+        }
+
+        viewModelScope.launch {
+            container.speechToTextEngine.modelState.collect { modelState ->
+                _uiState.update { it.copy(modelState = modelState) }
             }
         }
 
@@ -82,30 +92,77 @@ class NoteEditorViewModel(
     fun updateTranscription(value: String) = _uiState.update { it.copy(transcription = value) }
     fun selectCategory(categoryId: Long?) = _uiState.update { it.copy(categoryId = categoryId) }
 
+    fun downloadSpeechModel() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(errorMessage = null) }
+            val result = container.speechToTextEngine.ensureModelInstalled(allowDownload = true)
+            if (result.isSuccess) {
+                container.speechToTextEngine.initialize()
+            } else {
+                _uiState.update {
+                    it.copy(errorMessage = result.exceptionOrNull()?.message ?: "نصب مدل ناموفق بود")
+                }
+            }
+        }
+    }
+
     fun startRecording() {
-        val result = container.audioRecorderManager.startRecording()
-        if (result.isSuccess) {
-            _uiState.update { it.copy(isRecording = true, errorMessage = null) }
-        } else {
-            _uiState.update {
-                it.copy(errorMessage = "خطا در شروع ضبط صدا: ${result.exceptionOrNull()?.message}")
+        viewModelScope.launch {
+            val modelReady = container.speechToTextEngine.ensureModelInstalled(allowDownload = false)
+            if (modelReady.isSuccess) {
+                container.speechToTextEngine.startLiveRecognition()
+                container.audioRecorderManager.setPcmListener { chunk ->
+                    container.speechToTextEngine.acceptPcmChunk(chunk)
+                }
+            } else {
+                container.audioRecorderManager.setPcmListener(null)
+            }
+
+            val result = container.audioRecorderManager.startRecording()
+            if (result.isSuccess) {
+                _uiState.update { it.copy(isRecording = true, errorMessage = null) }
+            } else {
+                container.speechToTextEngine.cancelLiveRecognition()
+                _uiState.update {
+                    it.copy(errorMessage = "خطا در شروع ضبط صدا: ${result.exceptionOrNull()?.message}")
+                }
             }
         }
     }
 
     fun stopRecording() {
-        val file = container.audioRecorderManager.stopRecording()
-        _uiState.update {
-            it.copy(
-                isRecording = false,
-                audioFilePath = file?.absolutePath
-            )
+        viewModelScope.launch {
+            val file = container.audioRecorderManager.stopRecording()
+            container.audioRecorderManager.setPcmListener(null)
+
+            var transcription = _uiState.value.transcription
+            if (container.speechToTextEngine.modelState.value is ModelInstallState.Installed) {
+                val liveResult = container.speechToTextEngine.finishLiveRecognition()
+                if (liveResult.isSuccess && liveResult.getOrDefault("").isNotBlank()) {
+                    transcription = liveResult.getOrDefault("")
+                } else if (file != null && transcription.isBlank()) {
+                    val fileResult = container.speechToTextEngine.transcribeFile(file.absolutePath)
+                    if (fileResult.isSuccess) {
+                        transcription = fileResult.getOrDefault("")
+                    }
+                }
+            }
+
+            _uiState.update {
+                it.copy(
+                    isRecording = false,
+                    audioFilePath = file?.absolutePath,
+                    transcription = transcription
+                )
+            }
         }
     }
 
     fun cancelRecording() {
         container.audioRecorderManager.cancelRecording()
-        _uiState.update { it.copy(isRecording = false, audioFilePath = null) }
+        container.audioRecorderManager.setPcmListener(null)
+        container.speechToTextEngine.cancelLiveRecognition()
+        _uiState.update { it.copy(isRecording = false, audioFilePath = null, transcription = "") }
     }
 
     fun playRecording() {
@@ -117,6 +174,17 @@ class NoteEditorViewModel(
         val path = _uiState.value.audioFilePath ?: return
         viewModelScope.launch {
             _uiState.update { it.copy(isTranscribing = true, errorMessage = null) }
+            val modelResult = container.speechToTextEngine.ensureModelInstalled(allowDownload = true)
+            if (modelResult.isFailure) {
+                _uiState.update {
+                    it.copy(
+                        isTranscribing = false,
+                        errorMessage = modelResult.exceptionOrNull()?.message ?: "مدل نصب نیست"
+                    )
+                }
+                return@launch
+            }
+
             val result = container.speechToTextEngine.transcribeFile(path)
             _uiState.update {
                 if (result.isSuccess) {
@@ -180,12 +248,15 @@ class NoteEditorViewModel(
 
     fun initializeSpeechEngine() {
         viewModelScope.launch {
+            container.speechToTextEngine.ensureModelInstalled(allowDownload = false)
             container.speechToTextEngine.initialize()
         }
     }
 
     override fun onCleared() {
         container.audioRecorderManager.stopPlayback()
+        container.audioRecorderManager.setPcmListener(null)
+        container.speechToTextEngine.cancelLiveRecognition()
         super.onCleared()
     }
 
