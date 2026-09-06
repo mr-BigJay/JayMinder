@@ -6,24 +6,19 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
-import java.io.BufferedInputStream
 import java.io.File
-import java.io.FileOutputStream
-import java.net.HttpURLConnection
-import java.net.URL
-import java.util.zip.ZipInputStream
 
 sealed class ModelInstallState {
     data object NotInstalled : ModelInstallState()
     data object Checking : ModelInstallState()
-    data class Downloading(val progress: Float, val message: String) : ModelInstallState()
+    data class Installing(val message: String) : ModelInstallState()
     data class Installed(val modelPath: String, val modelName: String) : ModelInstallState()
     data class Error(val message: String) : ModelInstallState()
 }
 
 /**
- * Manages the offline Vosk Persian model.
- * Priority: bundled assets → previously installed files → one-time download.
+ * Installs the bundled Vosk Persian model from APK assets to app storage on first use.
+ * No internet download required — model ships inside the app.
  */
 class VoskModelManager(private val context: Context) {
 
@@ -36,8 +31,6 @@ class VoskModelManager(private val context: Context) {
     companion object {
         const val DEFAULT_MODEL_ID = "vosk-model-small-fa-0.5"
         private const val ASSET_MODEL_PATH = "model/vosk-model-small-fa-0.5"
-        private const val DOWNLOAD_URL =
-            "https://alphacephei.com/vosk/models/vosk-model-small-fa-0.5.zip"
     }
 
     fun getModelDirectory(): File? {
@@ -48,7 +41,7 @@ class VoskModelManager(private val context: Context) {
         return path?.let { File(it) }?.takeIf { it.exists() && File(it, "am").exists() }
     }
 
-    suspend fun ensureModelInstalled(allowDownload: Boolean = true): Result<File> = withContext(Dispatchers.IO) {
+    suspend fun ensureModelInstalled(): Result<File> = withContext(Dispatchers.IO) {
         _state.value = ModelInstallState.Checking
 
         val existing = getModelDirectory() ?: findInstalledModel()
@@ -57,29 +50,14 @@ class VoskModelManager(private val context: Context) {
             return@withContext Result.success(existing)
         }
 
-        val fromAssets = copyFromAssets()
-        if (fromAssets != null) {
-            markInstalled(fromAssets)
-            return@withContext Result.success(fromAssets)
-        }
-
-        if (!allowDownload) {
-            val error = ModelInstallState.Error(
-                "مدل تشخیص گفتار نصب نیست. از تنظیمات، مدل فارسی را دانلود کنید."
-            )
-            _state.value = error
-            return@withContext Result.failure(IllegalStateException(error.message))
-        }
-
-        downloadAndInstall()
+        installFromBundledAssets()
     }
 
     private fun findInstalledModel(): File? {
+        val cached = File(modelsRoot, DEFAULT_MODEL_ID)
+        if (cached.isDirectory && File(cached, "am").exists()) return cached
         if (!modelsRoot.exists()) return null
-        modelsRoot.listFiles()?.forEach { dir ->
-            if (dir.isDirectory && File(dir, "am").exists()) return dir
-        }
-        return null
+        return modelsRoot.listFiles()?.firstOrNull { it.isDirectory && File(it, "am").exists() }
     }
 
     private fun markInstalled(modelDir: File) {
@@ -88,17 +66,30 @@ class VoskModelManager(private val context: Context) {
         _state.value = ModelInstallState.Installed(modelDir.absolutePath, DEFAULT_MODEL_ID)
     }
 
-    private fun copyFromAssets(): File? {
+    private fun installFromBundledAssets(): Result<File> {
         return try {
-            val assets = context.assets.list(ASSET_MODEL_PATH) ?: return null
-            if (assets.isEmpty()) return null
+            val assets = context.assets.list(ASSET_MODEL_PATH) ?: emptyArray()
+            if (assets.isEmpty()) {
+                throw IllegalStateException("مدل فارسی در اپلیکیشن پیدا نشد")
+            }
+
+            _state.value = ModelInstallState.Installing("آماده‌سازی مدل تشخیص گفتار…")
 
             val target = File(modelsRoot, DEFAULT_MODEL_ID)
             if (target.exists()) target.deleteRecursively()
             copyAssetFolder(ASSET_MODEL_PATH, target)
-            if (File(target, "am").exists()) target else null
-        } catch (_: Exception) {
-            null
+
+            if (!File(target, "am").exists()) {
+                throw IllegalStateException("مدل استخراج‌شده نامعتبر است")
+            }
+
+            markInstalled(target)
+            Result.success(target)
+        } catch (e: Exception) {
+            _state.value = ModelInstallState.Error(
+                e.message ?: "خطا در آماده‌سازی مدل تشخیص گفتار"
+            )
+            Result.failure(e)
         }
     }
 
@@ -122,85 +113,6 @@ class VoskModelManager(private val context: Context) {
                 context.assets.open(childAsset).use { input ->
                     childTarget.outputStream().use { output -> input.copyTo(output) }
                 }
-            }
-        }
-    }
-
-    private suspend fun downloadAndInstall(): Result<File> {
-        return try {
-            _state.value = ModelInstallState.Downloading(0f, "شروع دانلود مدل فارسی…")
-
-            val zipFile = File(context.cacheDir, "$DEFAULT_MODEL_ID.zip")
-            downloadFile(DOWNLOAD_URL, zipFile) { progress ->
-                _state.value = ModelInstallState.Downloading(
-                    progress,
-                    "دانلود مدل فارسی… ${(progress * 100).toInt()}٪"
-                )
-            }
-
-            _state.value = ModelInstallState.Downloading(1f, "استخراج مدل…")
-            val target = File(modelsRoot, DEFAULT_MODEL_ID)
-            if (target.exists()) target.deleteRecursively()
-            unzip(zipFile, modelsRoot)
-
-            // Zip usually contains vosk-model-small-fa-0.5/ folder
-            val modelDir = File(modelsRoot, DEFAULT_MODEL_ID).takeIf { File(it, "am").exists() }
-                ?: modelsRoot.listFiles()?.firstOrNull { it.isDirectory && File(it, "am").exists() }
-
-            zipFile.delete()
-
-            if (modelDir == null) {
-                throw IllegalStateException("ساختار مدل دانلود‌شده نامعتبر است")
-            }
-
-            markInstalled(modelDir)
-            Result.success(modelDir)
-        } catch (e: Exception) {
-            _state.value = ModelInstallState.Error(
-                "خطا در نصب مدل: ${e.message ?: "نامشخص"}"
-            )
-            Result.failure(e)
-        }
-    }
-
-    private fun downloadFile(url: String, target: File, onProgress: (Float) -> Unit) {
-        val connection = URL(url).openConnection() as HttpURLConnection
-        connection.connectTimeout = 30_000
-        connection.readTimeout = 120_000
-        connection.instanceFollowRedirects = true
-        connection.connect()
-
-        val total = connection.contentLengthLong.coerceAtLeast(1L)
-        connection.inputStream.use { input ->
-            FileOutputStream(target).use { output ->
-                val buffer = ByteArray(8192)
-                var downloaded = 0L
-                while (true) {
-                    val read = input.read(buffer)
-                    if (read <= 0) break
-                    output.write(buffer, 0, read)
-                    downloaded += read
-                    onProgress((downloaded.toFloat() / total).coerceIn(0f, 0.99f))
-                }
-            }
-        }
-        onProgress(1f)
-    }
-
-    private fun unzip(zipFile: File, destDir: File) {
-        destDir.mkdirs()
-        ZipInputStream(BufferedInputStream(zipFile.inputStream())).use { zis ->
-            var entry = zis.nextEntry
-            while (entry != null) {
-                val outFile = File(destDir, entry.name)
-                if (entry.isDirectory) {
-                    outFile.mkdirs()
-                } else {
-                    outFile.parentFile?.mkdirs()
-                    FileOutputStream(outFile).use { fos -> zis.copyTo(fos) }
-                }
-                zis.closeEntry()
-                entry = zis.nextEntry
             }
         }
     }

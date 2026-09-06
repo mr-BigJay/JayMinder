@@ -11,9 +11,6 @@ app/build/
 .cxx
 # Keep app/schemas/
 
-# Vosk model (large binary - download separately)
-app/src/main/assets/model/vosk-model-small-fa-0.5/
-
 # APKs are distributed via GitHub Releases, not committed to git
 releases/
 *.apk

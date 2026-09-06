@@ -10,7 +10,7 @@ interface SpeechToTextEngine {
     val state: StateFlow<SpeechEngineState>
     val modelState: StateFlow<ModelInstallState>
 
-    suspend fun ensureModelInstalled(allowDownload: Boolean = true): Result<Unit>
+    suspend fun ensureModelInstalled(): Result<Unit>
     suspend fun initialize(): Result<Unit>
     suspend fun transcribeFile(audioFilePath: String): Result<String>
 

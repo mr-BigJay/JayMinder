@@ -120,44 +120,26 @@ fun NoteEditorScreen(
             )
 
             when (val modelState = uiState.modelState) {
-                is ModelInstallState.NotInstalled -> {
-                    Text(
-                        text = "برای تبدیل صدا به متن آفلاین، مدل فارسی را یک‌بار دانلود کنید (~۴۵ مگابایت). بعد از آن کاملاً آفلاین کار می‌کند.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                    )
-                    Button(onClick = viewModel::downloadSpeechModel) {
-                        Text("دانلود مدل تشخیص گفتار")
-                    }
-                }
-                is ModelInstallState.Checking -> {
+                is ModelInstallState.Installing -> {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(modifier = Modifier.size(20.dp).padding(end = 8.dp))
-                        Text("بررسی مدل…")
-                    }
-                }
-                is ModelInstallState.Downloading -> {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(
-                            progress = { modelState.progress },
-                            modifier = Modifier.size(20.dp).padding(end = 8.dp)
-                        )
                         Text(modelState.message)
                     }
                 }
                 is ModelInstallState.Installed -> {
                     Text(
-                        text = "مدل آفلاین فارسی نصب است — تشخیص حین ضبط فعال است.",
+                        text = "مدل فارسی همراه اپلیکیشن است — بدون نیاز به دانلود.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
                 is ModelInstallState.Error -> {
                     Text(text = modelState.message, color = MaterialTheme.colorScheme.error)
-                    Button(onClick = viewModel::downloadSpeechModel) {
+                    Button(onClick = viewModel::prepareSpeechModel) {
                         Text("تلاش مجدد")
                     }
                 }
+                else -> {}
             }
 
             if (uiState.isRecording && uiState.transcription.isNotBlank()) {

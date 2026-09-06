@@ -92,23 +92,16 @@ class NoteEditorViewModel(
     fun updateTranscription(value: String) = _uiState.update { it.copy(transcription = value) }
     fun selectCategory(categoryId: Long?) = _uiState.update { it.copy(categoryId = categoryId) }
 
-    fun downloadSpeechModel() {
+    fun prepareSpeechModel() {
         viewModelScope.launch {
-            _uiState.update { it.copy(errorMessage = null) }
-            val result = container.speechToTextEngine.ensureModelInstalled(allowDownload = true)
-            if (result.isSuccess) {
-                container.speechToTextEngine.initialize()
-            } else {
-                _uiState.update {
-                    it.copy(errorMessage = result.exceptionOrNull()?.message ?: "نصب مدل ناموفق بود")
-                }
-            }
+            container.speechToTextEngine.ensureModelInstalled()
+            container.speechToTextEngine.initialize()
         }
     }
 
     fun startRecording() {
         viewModelScope.launch {
-            val modelReady = container.speechToTextEngine.ensureModelInstalled(allowDownload = false)
+            val modelReady = container.speechToTextEngine.ensureModelInstalled()
             if (modelReady.isSuccess) {
                 container.speechToTextEngine.startLiveRecognition()
                 container.audioRecorderManager.setPcmListener { chunk ->
@@ -174,12 +167,12 @@ class NoteEditorViewModel(
         val path = _uiState.value.audioFilePath ?: return
         viewModelScope.launch {
             _uiState.update { it.copy(isTranscribing = true, errorMessage = null) }
-            val modelResult = container.speechToTextEngine.ensureModelInstalled(allowDownload = true)
+            val modelResult = container.speechToTextEngine.ensureModelInstalled()
             if (modelResult.isFailure) {
                 _uiState.update {
                     it.copy(
                         isTranscribing = false,
-                        errorMessage = modelResult.exceptionOrNull()?.message ?: "مدل نصب نیست"
+                        errorMessage = modelResult.exceptionOrNull()?.message ?: "مدل آماده نیست"
                     )
                 }
                 return@launch
@@ -248,7 +241,7 @@ class NoteEditorViewModel(
 
     fun initializeSpeechEngine() {
         viewModelScope.launch {
-            container.speechToTextEngine.ensureModelInstalled(allowDownload = false)
+            container.speechToTextEngine.ensureModelInstalled()
             container.speechToTextEngine.initialize()
         }
     }

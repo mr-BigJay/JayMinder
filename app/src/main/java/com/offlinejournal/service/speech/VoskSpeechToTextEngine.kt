@@ -30,8 +30,8 @@ class VoskSpeechToTextEngine(
     private var liveRecognizer: Recognizer? = null
     private val partialTexts = mutableListOf<String>()
 
-    override suspend fun ensureModelInstalled(allowDownload: Boolean): Result<Unit> {
-        return modelManager.ensureModelInstalled(allowDownload).map { Unit }
+    override suspend fun ensureModelInstalled(): Result<Unit> {
+        return modelManager.ensureModelInstalled().map { Unit }
     }
 
     override suspend fun initialize(): Result<Unit> = withContext(Dispatchers.IO) {
@@ -42,7 +42,7 @@ class VoskSpeechToTextEngine(
 
         _state.value = SpeechEngineState.Initializing
         try {
-            val modelDir = modelManager.ensureModelInstalled(allowDownload = false).getOrElse {
+            val modelDir = modelManager.ensureModelInstalled().getOrElse {
                 return@withContext Result.failure(it)
             }
             model = Model(modelDir.absolutePath)
