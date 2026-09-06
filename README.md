@@ -1,4 +1,4 @@
-# یادداشت آفلاین — Offline Journal
+# JayMinder — Offline Persian Voice Journal
 
 اپلیکیشن اندروید بومی برای یادداشت روزانه، ضبط صدا، تبدیل گفتار به متن (آفلاین) و یادآوری — با رابط کاربری فارسی و تقویم شمسی.
 
@@ -52,9 +52,9 @@ APK از **GitHub Releases** قابل دانلود است (فایل‌های ب�
 
 https://github.com/mr-BigJay/JayMinder/releases/latest
 
-روی `OfflineJournal-v1.0.0.apk` کلیک کنید تا دانلود شود.
+روی `JayMinder-*.apk` کلیک کنید تا دانلود شود.
 
-> APK unsigned است. برای نصب، «نصب از منابع ناشناس» را در گوشی فعال کنید.
+> APK با کلید debug امضا شده و برای نصب مستقیم روی گوشی مناسب است.
 
 ## مجوزها
 

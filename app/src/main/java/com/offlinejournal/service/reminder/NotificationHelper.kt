@@ -21,7 +21,7 @@ object NotificationHelper {
                 CHANNEL_NAME,
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "اعلان‌های یادآوری یادداشت آفلاین"
+                description = "اعلان‌های یادآوری JayMinder"
                 enableVibration(true)
             }
             val manager = context.getSystemService(NotificationManager::class.java)

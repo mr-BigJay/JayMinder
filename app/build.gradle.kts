@@ -13,8 +13,8 @@ android {
         applicationId = "com.offlinejournal"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -25,6 +25,9 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
+            // Sign release APK so it can be installed on devices (unsigned APKs fail with
+            // "package appears to be invalid"). Debug keystore is fine for direct distribution.
+            signingConfig = signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
