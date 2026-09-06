@@ -53,13 +53,13 @@ util/           → تقویم جلالی، فرمت فارسی
 
 ## دانلود APK
 
-فایل آماده نصب:
+APK از **GitHub Releases** قابل دانلود است (فایل‌های بزرگ در Releases قرار می‌گیرند، نه داخل کد منبع):
 
-```
-releases/OfflineJournal-v1.0.0.apk
-```
+https://github.com/mr-BigJay/JayMinder/releases/latest
 
-> این APK unsigned است. برای نصب روی گوشی، «نصب از منابع ناشناس» را فعال کنید.
+روی `OfflineJournal-v1.0.0.apk` کلیک کنید تا دانلود شود.
+
+> APK unsigned است. برای نصب، «نصب از منابع ناشناس» را در گوشی فعال کنید.
 
 ## مجوزها
 
