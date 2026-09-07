@@ -14,7 +14,9 @@ import com.offlinejournal.presentation.screens.CategorySelectScreen
 import com.offlinejournal.presentation.screens.HomeScreen
 import com.offlinejournal.presentation.screens.NoteDetailScreen
 import com.offlinejournal.presentation.screens.NoteEditorScreen
+import com.offlinejournal.presentation.screens.NotesListScreen
 import com.offlinejournal.presentation.screens.ReminderEditorScreen
+import com.offlinejournal.presentation.screens.SearchScreen
 
 @Composable
 fun OfflineJournalNavHost(container: AppContainer) {
@@ -29,8 +31,11 @@ fun OfflineJournalNavHost(container: AppContainer) {
                 HomeScreen(
                     container = container,
                     onNewNote = { navController.navigate(Screen.SelectCategory.route) },
+                    onNewVoiceNote = { navController.navigate(Screen.SelectCategory.route) },
                     onNewReminder = { navController.navigate(Screen.NewReminder.route) },
                     onNoteClick = { id -> navController.navigate(Screen.NoteDetail.createRoute(id)) },
+                    onAllNotesClick = { navController.navigate(Screen.NotesList.route) },
+                    onSearch = { navController.navigate(Screen.Search.route) },
                     onEditReminder = { id -> navController.navigate(Screen.EditReminder.createRoute(id)) }
                 )
             }
@@ -84,6 +89,22 @@ fun OfflineJournalNavHost(container: AppContainer) {
                     noteId = noteId,
                     onBack = { navController.popBackStack() },
                     onSaved = { navController.popBackStack() }
+                )
+            }
+
+            composable(Screen.NotesList.route) {
+                NotesListScreen(
+                    container = container,
+                    onBack = { navController.popBackStack() },
+                    onNoteClick = { id -> navController.navigate(Screen.NoteDetail.createRoute(id)) }
+                )
+            }
+
+            composable(Screen.Search.route) {
+                SearchScreen(
+                    container = container,
+                    onBack = { navController.popBackStack() },
+                    onNoteClick = { id -> navController.navigate(Screen.NoteDetail.createRoute(id)) }
                 )
             }
 

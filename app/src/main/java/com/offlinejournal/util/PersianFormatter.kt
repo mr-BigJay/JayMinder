@@ -53,6 +53,21 @@ object PersianFormatter {
         return "${formatJalaliDate(epochMillis)} - ${formatTime(epochMillis)}"
     }
 
+    fun formatRelativeUntil(
+        epochMillis: Long,
+        referenceMillis: Long = TehranTime.nowMillis()
+    ): String? {
+        val diffMillis = epochMillis - referenceMillis
+        if (diffMillis < 0) return null
+        val totalMinutes = diffMillis / (60 * 1000)
+        val hours = totalMinutes / 60
+        return when {
+            hours >= 1 -> "${toPersianDigits(hours.toInt())} ساعت بعد"
+            totalMinutes >= 1 -> "${toPersianDigits(totalMinutes.toInt())} دقیقه بعد"
+            else -> "به زودی"
+        }
+    }
+
     private fun weekdayName(dayOfWeek: Int): String = when (dayOfWeek) {
         6 -> "شنبه"
         7 -> "یکشنبه"

@@ -21,6 +21,6 @@ sealed class Screen(val route: String) {
 
 enum class HomeTab {
     CATEGORIES,
-    NOTES,
+    HOME,
     REMINDERS
 }
