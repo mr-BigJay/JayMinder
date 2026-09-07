@@ -122,19 +122,19 @@ fun HomeScreen(
                 .padding(padding)
                 .padding(horizontal = 20.dp)
         ) {
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
             Image(
                 painter = painterResource(R.drawable.jayminder_logo),
                 contentDescription = "JayMinder",
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(120.dp)
-                    .clip(RoundedCornerShape(16.dp)),
+                    .height(100.dp)
+                    .padding(horizontal = 32.dp),
                 contentScale = ContentScale.Fit
             )
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
             ActionPlusButton(
                 label = "یادداشت جدید",
