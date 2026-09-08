@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -85,7 +86,6 @@ import com.offlinejournal.presentation.viewmodel.RemindersViewModel
 @Composable
 fun HomeScreen(
     container: AppContainer,
-    onNewNote: () -> Unit,
     onNewVoiceNote: () -> Unit,
     onNewReminder: () -> Unit,
     onNoteClick: (Long) -> Unit,
@@ -114,7 +114,6 @@ fun HomeScreen(
             HomeTab.HOME -> HomeDashboardContent(
                 modifier = Modifier.padding(padding),
                 homeState = homeState,
-                onNewNote = onNewNote,
                 onNewVoiceNote = onNewVoiceNote,
                 onNewReminder = onNewReminder,
                 onNoteClick = onNoteClick,
@@ -146,7 +145,6 @@ fun HomeScreen(
 private fun HomeDashboardContent(
     modifier: Modifier = Modifier,
     homeState: com.offlinejournal.presentation.viewmodel.HomeUiState,
-    onNewNote: () -> Unit,
     onNewVoiceNote: () -> Unit,
     onNewReminder: () -> Unit,
     onNoteClick: (Long) -> Unit,
@@ -168,16 +166,9 @@ private fun HomeDashboardContent(
                 currentTime = homeState.currentTime,
                 menuExpanded = menuExpanded,
                 onMenuToggle = { menuExpanded = it },
-                onSearch = onSearch
-            )
-        }
-
-        item {
-            ShortcutCardsRow(
-                onNewNote = onNewNote,
-                onNewReminder = onNewReminder,
+                onSearch = onSearch,
                 onNewVoiceNote = onNewVoiceNote,
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
+                onNewReminder = onNewReminder
             )
         }
 
@@ -260,13 +251,15 @@ private fun DashboardHeader(
     currentTime: String,
     menuExpanded: Boolean,
     onMenuToggle: (Boolean) -> Unit,
-    onSearch: () -> Unit
+    onSearch: () -> Unit,
+    onNewVoiceNote: () -> Unit,
+    onNewReminder: () -> Unit
 ) {
     Box(modifier = Modifier.fillMaxWidth()) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(260.dp)
+                .height(290.dp)
         ) {
             Box(
                 modifier = Modifier
@@ -286,9 +279,10 @@ private fun DashboardHeader(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
+                    .statusBarsPadding()
                     .padding(horizontal = 20.dp)
             ) {
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -329,20 +323,7 @@ private fun DashboardHeader(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
-
-                Text(
-                    text = "سلام، امروز روز خوبی برای پیشرفت.",
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        lineHeight = 32.sp
-                    ),
-                    color = Color.White,
-                    modifier = Modifier.fillMaxWidth(0.85f)
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -381,6 +362,14 @@ private fun DashboardHeader(
                         )
                     }
                 }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                ShortcutCardsRow(
+                    onNewReminder = onNewReminder,
+                    onNewVoiceNote = onNewVoiceNote,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
     }
@@ -433,31 +422,24 @@ private fun MountainSilhouette(modifier: Modifier = Modifier) {
 
 @Composable
 private fun ShortcutCardsRow(
-    onNewNote: () -> Unit,
     onNewReminder: () -> Unit,
     onNewVoiceNote: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Row(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         ShortcutCard(
-            label = "یادداشت جدید",
-            icon = Icons.Default.Description,
-            onClick = onNewNote,
+            label = "یادداشت صوتی",
+            icon = Icons.Default.Mic,
+            onClick = onNewVoiceNote,
             modifier = Modifier.weight(1f)
         )
         ShortcutCard(
             label = "یادآوری جدید",
             icon = Icons.Default.Notifications,
             onClick = onNewReminder,
-            modifier = Modifier.weight(1f)
-        )
-        ShortcutCard(
-            label = "یادداشت صوتی",
-            icon = Icons.Default.Mic,
-            onClick = onNewVoiceNote,
             modifier = Modifier.weight(1f)
         )
     }
