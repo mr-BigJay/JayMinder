@@ -437,19 +437,34 @@ private fun DashboardHeader(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        text = usdPriceText,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFFA78BFA),
-                        fontSize = 11.sp
-                    )
-                    Text(
-                        text = goldPriceText,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFFA78BFA),
-                        fontSize = 11.sp
-                    )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(text = "💵", fontSize = 13.sp)
+                        Text(
+                            text = usdPriceText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFFA78BFA),
+                            fontSize = 11.sp
+                        )
+                    }
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(text = "💰", fontSize = 13.sp)
+                        Text(
+                            text = goldPriceText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFFA78BFA),
+                            fontSize = 11.sp
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
@@ -678,7 +693,7 @@ private fun RecentNoteCard(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = note.title ?: "بدون عنوان",
+                    text = note.title?.takeIf { it.isNotBlank() } ?: "…",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis

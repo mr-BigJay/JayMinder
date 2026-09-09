@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,19 +14,20 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Category
-import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -35,6 +37,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -43,9 +46,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.offlinejournal.data.local.AppContainer
 import com.offlinejournal.domain.model.Note
@@ -55,9 +61,10 @@ import com.offlinejournal.presentation.theme.NavyCard
 import com.offlinejournal.presentation.theme.NavyDark
 import com.offlinejournal.presentation.theme.NavySurface
 import com.offlinejournal.presentation.theme.PurplePrimary
-import com.offlinejournal.presentation.viewmodel.NotesTimelineUiState
 import com.offlinejournal.presentation.viewmodel.NotesTimelineViewModel
 import com.offlinejournal.presentation.viewmodel.NotesViewTab
+import com.offlinejournal.util.JalaliDate
+
 @Composable
 fun NotesTimelineScreen(
     container: AppContainer,
@@ -66,6 +73,7 @@ fun NotesTimelineScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var selectedNote by remember { mutableStateOf<Note?>(null) }
+    var showCustomDateModal by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -74,29 +82,35 @@ fun NotesTimelineScreen(
     ) {
         NotesTabRow(
             selectedTab = uiState.selectedTab,
-            onTabSelected = viewModel::selectTab
+            onTabSelected = { tab ->
+                if (tab == NotesViewTab.CUSTOM) {
+                    showCustomDateModal = true
+                } else {
+                    viewModel.selectTab(tab)
+                }
+            }
         )
 
-        if (uiState.selectedTab == NotesViewTab.CUSTOM) {
-            CustomDatePicker(
-                year = uiState.customYear,
-                month = uiState.customMonth,
-                day = uiState.customDay,
-                onDateChange = viewModel::updateCustomDate
-            )
-        }
-
         Row(
-            modifier = Modifier.padding(vertical = 12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.Center
         ) {
             Text(
                 text = uiState.headerDate,
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                color = Color.White
+                color = Color.White,
+                textAlign = TextAlign.Center
             )
-            Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = PurplePrimary, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Icon(
+                Icons.Default.CalendarMonth,
+                contentDescription = null,
+                tint = PurplePrimary,
+                modifier = Modifier.size(18.dp)
+            )
         }
 
         if (uiState.groups.isEmpty()) {
@@ -104,24 +118,36 @@ fun NotesTimelineScreen(
         } else {
             LazyColumn(
                 contentPadding = PaddingValues(bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                verticalArrangement = Arrangement.spacedBy(0.dp)
             ) {
+                val showDayHeaders = uiState.selectedTab == NotesViewTab.WEEK ||
+                    uiState.selectedTab == NotesViewTab.MONTH ||
+                    (uiState.selectedTab == NotesViewTab.CUSTOM && uiState.groups.size > 1)
+
                 uiState.groups.forEach { group ->
-                    if (uiState.selectedTab == NotesViewTab.WEEK || uiState.selectedTab == NotesViewTab.MONTH) {
+                    if (showDayHeaders) {
                         item(key = "header_${group.dayLabel}") {
                             Text(
                                 text = group.dayLabel,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = PurplePrimary,
-                                modifier = Modifier.padding(vertical = 8.dp)
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp),
+                                textAlign = TextAlign.Center
                             )
                         }
                     }
-                    items(group.notes, key = { it.id }) { note ->
+                    itemsIndexed(
+                        group.notes,
+                        key = { _, note -> note.id }
+                    ) { index, note ->
                         TimelineNoteItem(
                             note = note,
                             timeText = viewModel.formatTime(note),
                             categoryName = viewModel.categoryName(uiState.categories, note.categoryId),
+                            showTopLine = index > 0,
+                            showBottomLine = index < group.notes.lastIndex,
                             onPlay = {
                                 note.audioFilePath?.let { path ->
                                     viewModel.playAudio(path)
@@ -133,6 +159,22 @@ fun NotesTimelineScreen(
                 }
             }
         }
+    }
+
+    if (showCustomDateModal) {
+        CustomDateRangeModal(
+            startYear = uiState.customStartYear,
+            startMonth = uiState.customStartMonth,
+            startDay = uiState.customStartDay,
+            endYear = uiState.customEndYear,
+            endMonth = uiState.customEndMonth,
+            endDay = uiState.customEndDay,
+            onDismiss = { showCustomDateModal = false },
+            onApply = { start, end ->
+                viewModel.applyCustomDateRange(start, end)
+                showCustomDateModal = false
+            }
+        )
     }
 
     selectedNote?.let { note ->
@@ -175,14 +217,17 @@ private fun NotesTabRow(selectedTab: NotesViewTab, onTabSelected: (NotesViewTab)
             ) {
                 Text(
                     text = label,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp, vertical = 10.dp),
                     color = if (selected) Color.White else Color(0xFF94A3B8),
                     style = MaterialTheme.typography.labelMedium.copy(
                         fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
                         fontSize = 11.sp
                     ),
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center
                 )
             }
         }
@@ -190,35 +235,126 @@ private fun NotesTabRow(selectedTab: NotesViewTab, onTabSelected: (NotesViewTab)
 }
 
 @Composable
-private fun CustomDatePicker(
+private fun CustomDateRangeModal(
+    startYear: Int,
+    startMonth: Int,
+    startDay: Int,
+    endYear: Int,
+    endMonth: Int,
+    endDay: Int,
+    onDismiss: () -> Unit,
+    onApply: (JalaliDate, JalaliDate) -> Unit
+) {
+    var sYear by remember { mutableIntStateOf(startYear) }
+    var sMonth by remember { mutableIntStateOf(startMonth) }
+    var sDay by remember { mutableIntStateOf(startDay) }
+    var eYear by remember { mutableIntStateOf(endYear) }
+    var eMonth by remember { mutableIntStateOf(endMonth) }
+    var eDay by remember { mutableIntStateOf(endDay) }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable(onClick = onDismiss),
+            contentAlignment = Alignment.Center
+        ) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(0.88f),
+                shape = RoundedCornerShape(20.dp),
+                color = NavyCard
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "انتخاب بازه تاریخ",
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                        color = Color.White,
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center
+                    )
+
+                    Text(
+                        text = "تاریخ ابتدا",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = PurplePrimary
+                    )
+                    JalaliDateFields(
+                        year = sYear,
+                        month = sMonth,
+                        day = sDay,
+                        onChange = { y, m, d ->
+                            sYear = y
+                            sMonth = m
+                            sDay = d
+                        }
+                    )
+
+                    Text(
+                        text = "تاریخ انتها",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = PurplePrimary
+                    )
+                    JalaliDateFields(
+                        year = eYear,
+                        month = eMonth,
+                        day = eDay,
+                        onChange = { y, m, d ->
+                            eYear = y
+                            eMonth = m
+                            eDay = d
+                        }
+                    )
+
+                    Button(
+                        onClick = {
+                            onApply(JalaliDate(sYear, sMonth, sDay), JalaliDate(eYear, eMonth, eDay))
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = PurplePrimary),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("اعمال")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun JalaliDateFields(
     year: Int,
     month: Int,
     day: Int,
-    onDateChange: (Int, Int, Int) -> Unit
+    onChange: (Int, Int, Int) -> Unit
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 8.dp),
+        modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         OutlinedTextField(
             value = year.toString(),
-            onValueChange = { v -> v.toIntOrNull()?.let { onDateChange(it, month, day) } },
+            onValueChange = { v -> v.toIntOrNull()?.let { onChange(it, month, day) } },
             label = { Text("سال") },
             modifier = Modifier.weight(1f),
             singleLine = true
         )
         OutlinedTextField(
             value = month.toString(),
-            onValueChange = { v -> v.toIntOrNull()?.let { onDateChange(year, it, day) } },
+            onValueChange = { v -> v.toIntOrNull()?.let { onChange(year, it, day) } },
             label = { Text("ماه") },
             modifier = Modifier.weight(1f),
             singleLine = true
         )
         OutlinedTextField(
             value = day.toString(),
-            onValueChange = { v -> v.toIntOrNull()?.let { onDateChange(year, month, it) } },
+            onValueChange = { v -> v.toIntOrNull()?.let { onChange(year, month, it) } },
             label = { Text("روز") },
             modifier = Modifier.weight(1f),
             singleLine = true
@@ -231,44 +367,39 @@ private fun TimelineNoteItem(
     note: Note,
     timeText: String,
     categoryName: String?,
+    showTopLine: Boolean,
+    showBottomLine: Boolean,
     onPlay: () -> Unit,
     onDetails: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 6.dp),
+            .height(IntrinsicSize.Min)
+            .padding(vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        TimelineRail(timeText = timeText)
-
-        Spacer(modifier = Modifier.width(10.dp))
-
         Row(
             modifier = Modifier
                 .weight(1f)
+                .heightIn(min = 72.dp)
                 .clip(RoundedCornerShape(16.dp))
                 .background(NavyCard)
                 .border(1.dp, Color(0xFF2D3A52), RoundedCornerShape(16.dp))
-                .padding(12.dp),
+                .padding(horizontal = 8.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (note.audioFilePath != null) {
-                IconButton(
-                    onClick = onPlay,
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(PurplePrimary.copy(alpha = 0.2f))
-                ) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = "پخش", tint = PurplePrimary)
-                }
-                Spacer(modifier = Modifier.width(8.dp))
+            IconButton(onClick = onDetails) {
+                Icon(Icons.Default.MoreVert, contentDescription = "جزئیات", tint = Color(0xFF94A3B8))
             }
 
-            Column(modifier = Modifier.weight(1f)) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 4.dp)
+            ) {
                 Text(
-                    text = note.title ?: "بدون عنوان",
+                    text = noteTitle(note),
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                     color = Color.White,
                     maxLines = 1,
@@ -283,34 +414,49 @@ private fun TimelineNoteItem(
                 )
             }
 
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(PurplePrimary.copy(alpha = 0.15f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = if (note.audioFilePath != null) Icons.Default.Mic else Icons.Default.Category,
-                    contentDescription = null,
-                    tint = PurplePrimary,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-
-            IconButton(onClick = onDetails) {
-                Icon(Icons.Default.MoreVert, contentDescription = "جزئیات", tint = Color(0xFF94A3B8))
+            if (note.audioFilePath != null) {
+                IconButton(
+                    onClick = onPlay,
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(PurplePrimary.copy(alpha = 0.2f))
+                ) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = "پخش", tint = PurplePrimary)
+                }
             }
         }
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        TimelineRail(
+            timeText = timeText,
+            showTopLine = showTopLine,
+            showBottomLine = showBottomLine
+        )
     }
 }
 
 @Composable
-private fun TimelineRail(timeText: String) {
+private fun TimelineRail(
+    timeText: String,
+    showTopLine: Boolean,
+    showBottomLine: Boolean
+) {
+    val lineColor = PurplePrimary.copy(alpha = 0.45f)
+
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.width(52.dp)
+        modifier = Modifier
+            .width(48.dp)
+            .fillMaxHeight()
     ) {
+        Box(
+            modifier = Modifier
+                .width(2.dp)
+                .weight(1f)
+                .background(if (showTopLine) lineColor else Color.Transparent)
+        )
         Box(
             modifier = Modifier
                 .size(10.dp)
@@ -321,8 +467,18 @@ private fun TimelineRail(timeText: String) {
             text = timeText,
             style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
             color = PurplePrimary,
-            fontSize = 11.sp,
-            modifier = Modifier.padding(top = 4.dp)
+            fontSize = 10.sp,
+            modifier = Modifier.padding(vertical = 4.dp),
+            textAlign = TextAlign.Center
+        )
+        Box(
+            modifier = Modifier
+                .width(2.dp)
+                .weight(1f)
+                .background(if (showBottomLine) lineColor else Color.Transparent)
         )
     }
 }
+
+private fun noteTitle(note: Note): String =
+    note.title?.takeIf { it.isNotBlank() } ?: "…"

@@ -14,8 +14,8 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 data class MarketPriceUiState(
-    val usdText: String = "دلار: —",
-    val goldText: String = "طلا: —"
+    val usdText: String = "—",
+    val goldText: String = "—"
 )
 
 class MarketPriceViewModel(private val container: AppContainer) : ViewModel() {
@@ -34,8 +34,8 @@ class MarketPriceViewModel(private val container: AppContainer) : ViewModel() {
     private suspend fun refresh() {
         val prices = container.marketPriceRepository.fetchPrices()
         _uiState.value = MarketPriceUiState(
-            usdText = "دلار: ${formatToman(prices.usdToman)}",
-            goldText = "طلا: ${formatToman(prices.goldToman)}"
+            usdText = formatToman(prices.usdToman),
+            goldText = formatToman(prices.goldToman)
         )
     }
 

@@ -77,7 +77,10 @@ fun NoteDetailModal(
                 }
 
                 DetailField(label = "دسته‌بندی", value = categoryName ?: "بدون دسته‌بندی")
-                DetailField(label = "عنوان", value = note.title ?: "بدون عنوان")
+                DetailField(
+                    label = "عنوان",
+                    value = note.title?.takeIf { it.isNotBlank() } ?: "…"
+                )
                 DetailField(
                     label = "جزئیات",
                     value = note.textContent.ifBlank { "—" }
