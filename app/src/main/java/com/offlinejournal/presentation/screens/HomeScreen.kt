@@ -79,6 +79,8 @@ import com.offlinejournal.presentation.components.CategorySelectModal
 import com.offlinejournal.presentation.components.EmptyStateMessage
 import com.offlinejournal.presentation.components.JayMinderBottomBar
 import com.offlinejournal.presentation.components.MountainBackground
+import com.offlinejournal.presentation.components.NoteDetailModal
+import com.offlinejournal.presentation.components.TimelineNoteItem
 import com.offlinejournal.presentation.navigation.HomeTab
 import com.offlinejournal.presentation.theme.NavyCard
 import com.offlinejournal.presentation.theme.NavyDark
@@ -129,18 +131,22 @@ fun HomeScreen(
         when (selectedTab) {
             HomeTab.HOME -> HomeDashboardContent(
                 modifier = Modifier.padding(padding),
+                container = container,
                 homeState = homeState,
                 usdPriceText = marketPrices.usdText,
                 goldPriceText = marketPrices.goldText,
                 onNewVoiceNote = { voiceNoteStep = VoiceNoteStep.Category },
                 onNewReminder = onNewReminder,
-                onNoteClick = onNoteClick,
                 onAllNotesClick = { selectedTab = HomeTab.NOTES },
                 onSearch = onSearch,
                 onOpenCategories = { showCategoriesDialog = true },
                 onEditReminder = onEditReminder,
                 formatReminderTime = homeViewModel::formatReminderTime,
-                formatReminderRelative = homeViewModel::formatReminderRelative
+                formatReminderRelative = homeViewModel::formatReminderRelative,
+                formatNoteTime = homeViewModel::formatNoteTime,
+                categoryName = homeViewModel::categoryName,
+                onToggleNotePlayback = homeViewModel::toggleNotePlayback,
+                onStopAudio = homeViewModel::stopAudio
             )
             HomeTab.NOTES -> NotesTimelineScreen(
                 container = container,
@@ -196,20 +202,25 @@ fun HomeScreen(
 @Composable
 private fun HomeDashboardContent(
     modifier: Modifier = Modifier,
+    container: AppContainer,
     homeState: com.offlinejournal.presentation.viewmodel.HomeUiState,
     usdPriceText: String,
     goldPriceText: String,
     onNewVoiceNote: () -> Unit,
     onNewReminder: () -> Unit,
-    onNoteClick: (Long) -> Unit,
     onAllNotesClick: () -> Unit,
     onSearch: () -> Unit,
     onOpenCategories: () -> Unit,
     onEditReminder: (Long) -> Unit,
     formatReminderTime: (Reminder) -> String,
-    formatReminderRelative: (Reminder) -> String?
+    formatReminderRelative: (Reminder) -> String?,
+    formatNoteTime: (Note) -> String,
+    categoryName: (Long?) -> String?,
+    onToggleNotePlayback: (Note) -> Unit,
+    onStopAudio: () -> Unit
 ) {
     var menuExpanded by rememberSaveable { mutableStateOf(false) }
+    var selectedNote by remember { mutableStateOf<Note?>(null) }
     var liveTime by remember { mutableStateOf(PersianFormatter.formatTime(TehranTime.nowMillis())) }
     var liveDate by remember {
         mutableStateOf(PersianFormatter.formatJalaliDate(TehranTime.nowMillis(), includeWeekday = true))
@@ -248,8 +259,8 @@ private fun HomeDashboardContent(
 
         item {
             SectionHeader(
-                title = "امروز",
-                icon = Icons.Default.CalendarMonth,
+                title = "یادآوری",
+                emoji = "🔔",
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
             )
         }
@@ -284,7 +295,7 @@ private fun HomeDashboardContent(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 SectionHeader(
-                    title = "یادداشت‌های اخیر",
+                    title = "یادداشت اخیر",
                     icon = Icons.Default.Description,
                     modifier = Modifier.weight(1f)
                 )
@@ -308,14 +319,36 @@ private fun HomeDashboardContent(
                 )
             }
         } else {
-            items(homeState.recentNotes, key = { it.id }) { note ->
-                RecentNoteCard(
+            items(homeState.recentNotes.size, key = { homeState.recentNotes[it].id }) { index ->
+                val note = homeState.recentNotes[index]
+                TimelineNoteItem(
                     note = note,
-                    onClick = { onNoteClick(note.id) },
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)
+                    timeText = formatNoteTime(note),
+                    categoryName = categoryName(note.categoryId),
+                    showTopLine = index > 0,
+                    showBottomLine = index < homeState.recentNotes.lastIndex,
+                    isPlaying = homeState.playingNoteId == note.id,
+                    onPlay = { onToggleNotePlayback(note) },
+                    onDetails = { selectedNote = note },
+                    modifier = Modifier.padding(horizontal = 20.dp)
                 )
             }
         }
+    }
+
+    selectedNote?.let { note ->
+        NoteDetailModal(
+            container = container,
+            noteId = note.id,
+            onDismiss = {
+                onStopAudio()
+                selectedNote = null
+            },
+            onDeleted = {
+                onStopAudio()
+                selectedNote = null
+            }
+        )
     }
 }
 
@@ -582,7 +615,8 @@ private fun ShortcutCard(
 @Composable
 private fun SectionHeader(
     title: String,
-    icon: ImageVector,
+    icon: ImageVector? = null,
+    emoji: String? = null,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -595,12 +629,15 @@ private fun SectionHeader(
             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
             color = MaterialTheme.colorScheme.onSurface
         )
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = PurplePrimary,
-            modifier = Modifier.size(20.dp)
-        )
+        when {
+            emoji != null -> Text(text = emoji, fontSize = 18.sp)
+            icon != null -> Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = PurplePrimary,
+                modifier = Modifier.size(20.dp)
+            )
+        }
     }
 }
 
@@ -665,60 +702,6 @@ private fun TodayReminderCard(
                 contentDescription = null,
                 tint = PurplePrimary.copy(alpha = 0.7f),
                 modifier = Modifier.size(22.dp)
-            )
-        }
-    }
-}
-
-@Composable
-private fun RecentNoteCard(
-    note: Note,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = NavyCard),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(1.dp, Color(0xFF2D3A52), RoundedCornerShape(16.dp))
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = note.title?.takeIf { it.isNotBlank() } ?: "…",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                if (note.displayText.isNotBlank()) {
-                    val previewLines = note.displayText.lines().take(2)
-                    previewLines.forEach { line ->
-                        Text(
-                            text = if (line.startsWith("-") || line.startsWith("•")) line else "• $line",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(top = 4.dp)
-                        )
-                    }
-                }
-            }
-            Icon(
-                Icons.Default.Description,
-                contentDescription = null,
-                tint = PurplePrimary,
-                modifier = Modifier
-                    .size(32.dp)
-                    .align(Alignment.CenterVertically)
             )
         }
     }

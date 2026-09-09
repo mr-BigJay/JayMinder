@@ -33,6 +33,7 @@ data class NotesTimelineUiState(
     val selectedTab: NotesViewTab = NotesViewTab.TODAY,
     val groups: List<TimelineDayGroup> = emptyList(),
     val categories: List<Category> = emptyList(),
+    val playingNoteId: Long? = null,
     val headerDate: String = "",
     val customStartYear: Int = 0,
     val customStartMonth: Int = 0,
@@ -46,6 +47,7 @@ class NotesTimelineViewModel(private val container: AppContainer) : ViewModel() 
     private val selectedTab = MutableStateFlow(NotesViewTab.TODAY)
     private val customStartDate = MutableStateFlow(currentJalali())
     private val customEndDate = MutableStateFlow(currentJalali())
+    private val playingNoteId = MutableStateFlow<Long?>(null)
 
     val uiState: StateFlow<NotesTimelineUiState> = combine(
         selectedTab,
@@ -68,6 +70,8 @@ class NotesTimelineViewModel(private val container: AppContainer) : ViewModel() 
             customEndMonth = end.month,
             customEndDay = end.day
         )
+    }.combine(playingNoteId) { state, playingId ->
+        state.copy(playingNoteId = playingId)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), NotesTimelineUiState())
 
     fun selectTab(tab: NotesViewTab) {
@@ -84,12 +88,22 @@ class NotesTimelineViewModel(private val container: AppContainer) : ViewModel() 
 
     fun formatTime(note: Note): String = PersianFormatter.formatTime(note.createdAtMillis)
 
-    fun playAudio(path: String, onComplete: () -> Unit = {}) {
-        container.audioRecorderManager.playAudio(path, onComplete)
+    fun toggleNotePlayback(note: Note) {
+        val path = note.audioFilePath ?: return
+        if (playingNoteId.value == note.id) {
+            stopAudio()
+            return
+        }
+        stopAudio()
+        playingNoteId.value = note.id
+        container.audioRecorderManager.playAudio(path) {
+            playingNoteId.value = null
+        }
     }
 
     fun stopAudio() {
         container.audioRecorderManager.stopPlayback()
+        playingNoteId.value = null
     }
 
     fun getDurationMs(path: String): Long =

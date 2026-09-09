@@ -28,12 +28,14 @@ data class HomeUiState(
     val selectedCategoryId: Long? = null,
     val greetingDate: String = "",
     val currentTime: String = "",
+    val playingNoteId: Long? = null,
     val isLoading: Boolean = true
 )
 
 class HomeViewModel(private val container: AppContainer) : ViewModel() {
     private val selectedPeriod = MutableStateFlow(DateFilterPeriod.ALL)
     private val selectedCategoryId = MutableStateFlow<Long?>(null)
+    private val playingNoteId = MutableStateFlow<Long?>(null)
 
     val uiState: StateFlow<HomeUiState> = combine(
         selectedPeriod,
@@ -45,6 +47,9 @@ class HomeViewModel(private val container: AppContainer) : ViewModel() {
     }.flatMapLatest { inputs ->
         container.noteRepository.observeNotesByPeriod(inputs.period, inputs.categoryId)
             .combine(selectedPeriod) { notes, period ->
+                notes to period
+            }
+            .combine(playingNoteId) { (notes, period), playingId ->
                 val now = TehranTime.nowMillis()
                 val todayReminders = inputs.upcomingReminders
                     .filter { DateRangeHelper.isToday(it.scheduledAtMillis, now) }
@@ -58,6 +63,7 @@ class HomeViewModel(private val container: AppContainer) : ViewModel() {
                     selectedCategoryId = inputs.categoryId,
                     greetingDate = PersianFormatter.formatJalaliDate(now, includeWeekday = true),
                     currentTime = PersianFormatter.formatTime(now),
+                    playingNoteId = playingId,
                     isLoading = false
                 )
             }
@@ -91,6 +97,30 @@ class HomeViewModel(private val container: AppContainer) : ViewModel() {
 
     fun formatReminderRelative(reminder: Reminder): String? =
         PersianFormatter.formatRelativeUntil(reminder.scheduledAtMillis)
+
+    fun formatNoteTime(note: Note): String =
+        PersianFormatter.formatTime(note.createdAtMillis)
+
+    fun categoryName(categoryId: Long?): String? =
+        uiState.value.categories.find { it.id == categoryId }?.name
+
+    fun toggleNotePlayback(note: Note) {
+        val path = note.audioFilePath ?: return
+        if (playingNoteId.value == note.id) {
+            stopAudio()
+            return
+        }
+        stopAudio()
+        playingNoteId.value = note.id
+        container.audioRecorderManager.playAudio(path) {
+            playingNoteId.value = null
+        }
+    }
+
+    fun stopAudio() {
+        container.audioRecorderManager.stopPlayback()
+        playingNoteId.value = null
+    }
 
     class Factory(private val container: AppContainer) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
