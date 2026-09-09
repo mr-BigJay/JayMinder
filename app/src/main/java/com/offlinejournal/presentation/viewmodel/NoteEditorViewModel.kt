@@ -128,29 +128,46 @@ class NoteEditorViewModel(
 
     fun stopRecording() {
         viewModelScope.launch {
-            val file = container.audioRecorderManager.stopRecording()
-            container.audioRecorderManager.setPcmListener(null)
+            stopRecordingInternal()
+        }
+    }
 
-            var transcription = _uiState.value.transcription
-            if (container.speechToTextEngine.modelState.value is ModelInstallState.Installed) {
-                val liveResult = container.speechToTextEngine.finishLiveRecognition()
-                if (liveResult.isSuccess && liveResult.getOrDefault("").isNotBlank()) {
-                    transcription = liveResult.getOrDefault("")
-                } else if (file != null && transcription.isBlank()) {
-                    val fileResult = container.speechToTextEngine.transcribeFile(file.absolutePath)
-                    if (fileResult.isSuccess) {
-                        transcription = fileResult.getOrDefault("")
-                    }
+    fun confirmAndSave() {
+        viewModelScope.launch {
+            if (_uiState.value.isRecording) {
+                stopRecordingInternal()
+            }
+            if (_uiState.value.audioFilePath == null) {
+                _uiState.update { it.copy(errorMessage = "ابتدا صدا را ضبط کنید") }
+                return@launch
+            }
+            saveNote()
+        }
+    }
+
+    private suspend fun stopRecordingInternal() {
+        val file = container.audioRecorderManager.stopRecording()
+        container.audioRecorderManager.setPcmListener(null)
+
+        var transcription = _uiState.value.transcription
+        if (container.speechToTextEngine.modelState.value is ModelInstallState.Installed) {
+            val liveResult = container.speechToTextEngine.finishLiveRecognition()
+            if (liveResult.isSuccess && liveResult.getOrDefault("").isNotBlank()) {
+                transcription = liveResult.getOrDefault("")
+            } else if (file != null && transcription.isBlank()) {
+                val fileResult = container.speechToTextEngine.transcribeFile(file.absolutePath)
+                if (fileResult.isSuccess) {
+                    transcription = fileResult.getOrDefault("")
                 }
             }
+        }
 
-            _uiState.update {
-                it.copy(
-                    isRecording = false,
-                    audioFilePath = file?.absolutePath,
-                    transcription = transcription
-                )
-            }
+        _uiState.update {
+            it.copy(
+                isRecording = false,
+                audioFilePath = file?.absolutePath,
+                transcription = transcription
+            )
         }
     }
 

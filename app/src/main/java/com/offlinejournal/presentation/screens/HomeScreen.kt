@@ -1,6 +1,5 @@
 package com.offlinejournal.presentation.screens
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -20,6 +19,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
@@ -32,7 +32,6 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.SouthEast
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -46,18 +45,19 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -71,8 +71,10 @@ import com.offlinejournal.data.local.AppContainer
 import com.offlinejournal.domain.model.Category
 import com.offlinejournal.domain.model.Note
 import com.offlinejournal.domain.model.Reminder
+import com.offlinejournal.presentation.components.CategorySelectModal
 import com.offlinejournal.presentation.components.EmptyStateMessage
 import com.offlinejournal.presentation.components.JayMinderBottomBar
+import com.offlinejournal.presentation.components.MountainBackground
 import com.offlinejournal.presentation.navigation.HomeTab
 import com.offlinejournal.presentation.theme.NavyCard
 import com.offlinejournal.presentation.theme.NavyDark
@@ -82,11 +84,15 @@ import com.offlinejournal.presentation.theme.PurplePrimary
 import com.offlinejournal.presentation.viewmodel.CategoriesViewModel
 import com.offlinejournal.presentation.viewmodel.HomeViewModel
 import com.offlinejournal.presentation.viewmodel.RemindersViewModel
+import com.offlinejournal.util.PersianFormatter
+import com.offlinejournal.util.TehranTime
+import kotlinx.coroutines.delay
+
+private enum class VoiceNoteStep { None, Category, Recording }
 
 @Composable
 fun HomeScreen(
     container: AppContainer,
-    onNewVoiceNote: () -> Unit,
     onNewReminder: () -> Unit,
     onNoteClick: (Long) -> Unit,
     onAllNotesClick: () -> Unit,
@@ -97,6 +103,8 @@ fun HomeScreen(
     remindersViewModel: RemindersViewModel = viewModel(factory = RemindersViewModel.Factory(container))
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(HomeTab.HOME) }
+    var voiceNoteStep by rememberSaveable { mutableStateOf(VoiceNoteStep.None) }
+    var voiceCategoryId by rememberSaveable { mutableStateOf<Long?>(null) }
     val homeState by homeViewModel.uiState.collectAsState()
     val categories by categoriesViewModel.categories.collectAsState()
     val upcomingReminders by remindersViewModel.upcomingReminders.collectAsState()
@@ -114,7 +122,7 @@ fun HomeScreen(
             HomeTab.HOME -> HomeDashboardContent(
                 modifier = Modifier.padding(padding),
                 homeState = homeState,
-                onNewVoiceNote = onNewVoiceNote,
+                onNewVoiceNote = { voiceNoteStep = VoiceNoteStep.Category },
                 onNewReminder = onNewReminder,
                 onNoteClick = onNoteClick,
                 onAllNotesClick = onAllNotesClick,
@@ -139,6 +147,32 @@ fun HomeScreen(
             )
         }
     }
+
+    if (voiceNoteStep == VoiceNoteStep.Category) {
+        CategorySelectModal(
+            container = container,
+            onDismiss = { voiceNoteStep = VoiceNoteStep.None },
+            onCategorySelected = { categoryId ->
+                voiceCategoryId = categoryId
+                voiceNoteStep = VoiceNoteStep.Recording
+            }
+        )
+    }
+
+    if (voiceNoteStep == VoiceNoteStep.Recording && voiceCategoryId != null) {
+        VoiceRecordScreen(
+            container = container,
+            categoryId = voiceCategoryId!!,
+            onDismiss = {
+                voiceNoteStep = VoiceNoteStep.None
+                voiceCategoryId = null
+            },
+            onSaved = {
+                voiceNoteStep = VoiceNoteStep.None
+                voiceCategoryId = null
+            }
+        )
+    }
 }
 
 @Composable
@@ -155,6 +189,19 @@ private fun HomeDashboardContent(
     formatReminderRelative: (Reminder) -> String?
 ) {
     var menuExpanded by rememberSaveable { mutableStateOf(false) }
+    var liveTime by remember { mutableStateOf(PersianFormatter.formatTime(TehranTime.nowMillis())) }
+    var liveDate by remember {
+        mutableStateOf(PersianFormatter.formatJalaliDate(TehranTime.nowMillis(), includeWeekday = true))
+    }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            val now = TehranTime.nowMillis()
+            liveTime = PersianFormatter.formatTime(now)
+            liveDate = PersianFormatter.formatJalaliDate(now, includeWeekday = true)
+            delay(1000)
+        }
+    }
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -162,8 +209,8 @@ private fun HomeDashboardContent(
     ) {
         item {
             DashboardHeader(
-                greetingDate = homeState.greetingDate,
-                currentTime = homeState.currentTime,
+                greetingDate = liveDate,
+                currentTime = liveTime,
                 menuExpanded = menuExpanded,
                 onMenuToggle = { menuExpanded = it },
                 onSearch = onSearch,
@@ -261,20 +308,7 @@ private fun DashboardHeader(
                 .fillMaxWidth()
                 .height(290.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                Color(0xFF2D1B69),
-                                Color(0xFF1A1040),
-                                NavyDark
-                            )
-                        )
-                    )
-            )
-            MountainSilhouette(modifier = Modifier.fillMaxSize())
+            MountainBackground()
 
             Column(
                 modifier = Modifier
@@ -314,12 +348,13 @@ private fun DashboardHeader(
                         }
                     }
                     Image(
-                        painter = painterResource(R.drawable.jayminder_logo),
+                        painter = painterResource(R.drawable.ic_app_icon),
                         contentDescription = "JayMinder",
                         modifier = Modifier
-                            .height(36.dp)
-                            .width(140.dp),
-                        contentScale = ContentScale.Fit
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .border(2.dp, PurplePrimary.copy(alpha = 0.6f), CircleShape),
+                        contentScale = ContentScale.Crop
                     )
                 }
 
@@ -376,51 +411,6 @@ private fun DashboardHeader(
 }
 
 @Composable
-private fun MountainSilhouette(modifier: Modifier = Modifier) {
-    Canvas(modifier = modifier) {
-        val w = size.width
-        val h = size.height
-
-        val backPath = Path().apply {
-            moveTo(0f, h * 0.72f)
-            lineTo(w * 0.15f, h * 0.45f)
-            lineTo(w * 0.3f, h * 0.58f)
-            lineTo(w * 0.5f, h * 0.35f)
-            lineTo(w * 0.7f, h * 0.55f)
-            lineTo(w * 0.85f, h * 0.42f)
-            lineTo(w, h * 0.65f)
-            lineTo(w, h)
-            lineTo(0f, h)
-            close()
-        }
-        drawPath(backPath, Color(0xFF0D0820).copy(alpha = 0.6f))
-
-        val frontPath = Path().apply {
-            moveTo(0f, h * 0.82f)
-            lineTo(w * 0.2f, h * 0.62f)
-            lineTo(w * 0.4f, h * 0.75f)
-            lineTo(w * 0.6f, h * 0.55f)
-            lineTo(w * 0.8f, h * 0.7f)
-            lineTo(w, h * 0.78f)
-            lineTo(w, h)
-            lineTo(0f, h)
-            close()
-        }
-        drawPath(frontPath, Color(0xFF080510).copy(alpha = 0.85f))
-
-        drawCircle(
-            brush = Brush.radialGradient(
-                colors = listOf(PurplePrimary.copy(alpha = 0.35f), Color.Transparent),
-                center = Offset(w * 0.5f, h * 0.38f),
-                radius = w * 0.35f
-            ),
-            radius = w * 0.35f,
-            center = Offset(w * 0.5f, h * 0.38f)
-        )
-    }
-}
-
-@Composable
 private fun ShortcutCardsRow(
     onNewReminder: () -> Unit,
     onNewVoiceNote: () -> Unit,
@@ -454,44 +444,68 @@ private fun ShortcutCard(
 ) {
     Card(
         modifier = modifier
-            .height(110.dp)
+            .height(112.dp)
+            .shadow(8.dp, RoundedCornerShape(18.dp))
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = NavyCard),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFF1E2A42)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .border(1.dp, Color(0xFF2D3A52), RoundedCornerShape(16.dp))
-                .padding(12.dp)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFF243352),
+                            NavyCard
+                        )
+                    ),
+                    RoundedCornerShape(18.dp)
+                )
+                .border(
+                    width = 1.5.dp,
+                    brush = Brush.linearGradient(
+                        colors = listOf(PurplePrimary.copy(alpha = 0.7f), PurpleDark.copy(alpha = 0.4f))
+                    ),
+                    shape = RoundedCornerShape(18.dp)
+                )
+                .padding(14.dp)
         ) {
             Column(
                 modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.SpaceBetween
+                verticalArrangement = Arrangement.SpaceBetween,
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = label,
-                    tint = PurplePrimary,
-                    modifier = Modifier.size(28.dp)
-                )
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(PurplePrimary.copy(alpha = 0.35f), PurpleDark.copy(alpha = 0.2f))
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = label,
+                        tint = PurplePrimary,
+                        modifier = Modifier.size(26.dp)
+                    )
+                }
                 Text(
                     text = label,
-                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
-                    color = MaterialTheme.colorScheme.onSurface,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                    color = Color.White,
                     maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
                 )
             }
-            Icon(
-                Icons.Default.SouthEast,
-                contentDescription = null,
-                tint = PurplePrimary.copy(alpha = 0.6f),
-                modifier = Modifier
-                    .size(14.dp)
-                    .align(Alignment.BottomStart)
-            )
         }
     }
 }

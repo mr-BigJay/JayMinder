@@ -30,7 +30,6 @@ fun OfflineJournalNavHost(container: AppContainer) {
             composable(Screen.Home.route) {
                 HomeScreen(
                     container = container,
-                    onNewVoiceNote = { navController.navigate(Screen.SelectCategory.route) },
                     onNewReminder = { navController.navigate(Screen.NewReminder.route) },
                     onNoteClick = { id -> navController.navigate(Screen.NoteDetail.createRoute(id)) },
                     onAllNotesClick = { navController.navigate(Screen.NotesList.route) },
