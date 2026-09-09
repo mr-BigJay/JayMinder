@@ -1,15 +1,19 @@
 package com.offlinejournal.presentation.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
@@ -33,6 +37,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -43,6 +49,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.offlinejournal.data.local.AppContainer
 import com.offlinejournal.presentation.theme.NavyCard
 import com.offlinejournal.presentation.theme.NavyDark
+import com.offlinejournal.presentation.theme.PurpleDark
 import com.offlinejournal.presentation.theme.PurplePrimary
 import com.offlinejournal.presentation.viewmodel.NoteDetailModalViewModel
 
@@ -60,6 +67,7 @@ fun NoteDetailModal(
     var isPlaying by remember { mutableStateOf(false) }
     var menuExpanded by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var showSaveConfirm by remember { mutableStateOf(false) }
 
     val fieldColors = OutlinedTextFieldDefaults.colors(
         focusedBorderColor = PurplePrimary,
@@ -72,10 +80,7 @@ fun NoteDetailModal(
     )
 
     DisposableEffect(Unit) {
-        onDispose {
-            viewModel.stopAudio()
-            viewModel.saveChanges()
-        }
+        onDispose { viewModel.stopAudio() }
     }
 
     if (showDeleteConfirm) {
@@ -87,9 +92,7 @@ fun NoteDetailModal(
                 TextButton(
                     onClick = {
                         showDeleteConfirm = false
-                        viewModel.deleteNote {
-                            onDeleted()
-                        }
+                        viewModel.deleteNote { onDeleted() }
                     }
                 ) {
                     Text("بله، حذف شود", color = MaterialTheme.colorScheme.error)
@@ -103,10 +106,34 @@ fun NoteDetailModal(
         )
     }
 
+    if (showSaveConfirm) {
+        AlertDialog(
+            onDismissRequest = { showSaveConfirm = false },
+            title = { Text("ذخیره تغییرات") },
+            text = { Text("آیا از ذخیره تغییرات مطمئن هستید؟") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showSaveConfirm = false
+                        viewModel.stopAudio()
+                        viewModel.saveChanges(onDismiss)
+                    }
+                ) {
+                    Text("بله، ذخیره شود", color = PurplePrimary)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSaveConfirm = false }) {
+                    Text("انصراف")
+                }
+            }
+        )
+    }
+
     Dialog(
         onDismissRequest = {
             viewModel.stopAudio()
-            viewModel.saveChanges(onDismiss)
+            if (!uiState.hasChanges) onDismiss()
         },
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
@@ -128,13 +155,32 @@ fun NoteDetailModal(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(
-                        onClick = {
-                            viewModel.stopAudio()
-                            viewModel.saveChanges(onDismiss)
+                    if (uiState.hasChanges) {
+                        IconButton(
+                            onClick = { showSaveConfirm = true },
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    Brush.linearGradient(
+                                        colors = listOf(PurplePrimary, PurpleDark)
+                                    )
+                                )
+                        ) {
+                            Icon(
+                                Icons.Default.Check,
+                                contentDescription = "ذخیره تغییرات",
+                                tint = Color.White,
+                                modifier = Modifier.size(24.dp)
+                            )
                         }
-                    ) {
-                        Icon(Icons.Default.Close, contentDescription = "بستن", tint = Color.White)
+                    } else {
+                        IconButton(onClick = {
+                            viewModel.stopAudio()
+                            onDismiss()
+                        }) {
+                            Icon(Icons.Default.Close, contentDescription = "بستن", tint = Color.White)
+                        }
                     }
 
                     Box {

@@ -21,6 +21,7 @@ data class NoteDetailModalUiState(
     val durationMs: Long = 0L,
     val isTranscribing: Boolean = false,
     val isSaving: Boolean = false,
+    val hasChanges: Boolean = false,
     val errorMessage: String? = null
 )
 
@@ -34,6 +35,9 @@ class NoteDetailModalViewModel(
 
     private var categories: List<Category> = emptyList()
     private var fieldsLoaded = false
+    private var originalTitle = ""
+    private var originalTextContent = ""
+    private var originalTranscription = ""
 
     init {
         viewModelScope.launch {
@@ -46,16 +50,20 @@ class NoteDetailModalViewModel(
             container.noteRepository.observeNote(noteId).collect { note ->
                 if (note != null && !fieldsLoaded) {
                     fieldsLoaded = true
+                    originalTitle = note.title ?: ""
+                    originalTextContent = note.textContent
+                    originalTranscription = note.transcription ?: ""
                     _uiState.update {
                         it.copy(
                             note = note,
-                            title = note.title ?: "",
-                            textContent = note.textContent,
-                            transcription = note.transcription ?: "",
+                            title = originalTitle,
+                            textContent = originalTextContent,
+                            transcription = originalTranscription,
                             categoryName = categoryName(note.categoryId),
                             durationMs = note.audioFilePath?.let { path ->
                                 container.audioRecorderManager.getRecordingDurationMs(path)
-                            } ?: 0L
+                            } ?: 0L,
+                            hasChanges = false
                         )
                     }
                 } else {
@@ -83,10 +91,15 @@ class NoteDetailModalViewModel(
     private fun categoryName(categoryId: Long?): String =
         categories.find { it.id == categoryId }?.name ?: "بدون دسته‌بندی"
 
-    fun updateTitle(value: String) = _uiState.update { it.copy(title = value) }
-    fun updateTextContent(value: String) = _uiState.update { it.copy(textContent = value) }
-    fun updateTranscription(value: String) = _uiState.update { it.copy(transcription = value) }
-    fun clearTranscription() = _uiState.update { it.copy(transcription = "") }
+    fun updateTitle(value: String) = _uiState.update { it.copy(title = value, hasChanges = computeHasChanges(value, it.textContent, it.transcription)) }
+    fun updateTextContent(value: String) = _uiState.update { it.copy(textContent = value, hasChanges = computeHasChanges(it.title, value, it.transcription)) }
+    fun updateTranscription(value: String) = _uiState.update { it.copy(transcription = value, hasChanges = computeHasChanges(it.title, it.textContent, value)) }
+    fun clearTranscription() = updateTranscription("")
+
+    private fun computeHasChanges(title: String, textContent: String, transcription: String): Boolean =
+        title != originalTitle ||
+            textContent != originalTextContent ||
+            transcription != originalTranscription
 
     fun regenerateTranscription() {
         val path = _uiState.value.note?.audioFilePath ?: return
@@ -105,7 +118,12 @@ class NoteDetailModalViewModel(
             val result = container.speechToTextEngine.transcribeFile(path)
             _uiState.update {
                 if (result.isSuccess) {
-                    it.copy(transcription = result.getOrDefault(""), isTranscribing = false)
+                    val newText = result.getOrDefault("")
+                    it.copy(
+                        transcription = newText,
+                        isTranscribing = false,
+                        hasChanges = computeHasChanges(it.title, it.textContent, newText)
+                    )
                 } else {
                     it.copy(
                         isTranscribing = false,
@@ -129,6 +147,10 @@ class NoteDetailModalViewModel(
                         transcription = state.transcription.takeIf { it.isNotBlank() }
                     )
                 )
+                originalTitle = state.title
+                originalTextContent = state.textContent
+                originalTranscription = state.transcription
+                _uiState.update { it.copy(hasChanges = false) }
                 onSaved()
             } catch (e: Exception) {
                 _uiState.update { it.copy(errorMessage = "خطا در ذخیره: ${e.message}") }
