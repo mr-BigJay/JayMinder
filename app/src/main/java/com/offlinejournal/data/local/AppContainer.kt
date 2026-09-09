@@ -6,6 +6,7 @@ import com.offlinejournal.data.repository.CategoryRepository
 import com.offlinejournal.data.repository.NoteRepository
 import com.offlinejournal.data.repository.ReminderRepository
 import com.offlinejournal.service.audio.AudioRecorderManager
+import com.offlinejournal.service.market.MarketPriceRepository
 import com.offlinejournal.service.reminder.NotificationHelper
 import com.offlinejournal.service.reminder.ReminderScheduler
 import com.offlinejournal.service.speech.SpeechToTextEngine
@@ -27,6 +28,7 @@ class AppContainer(context: Context) {
     private val reminderScheduler = ReminderScheduler(appContext)
     val reminderRepository = ReminderRepository(database.reminderDao(), reminderScheduler)
 
+    val marketPriceRepository = MarketPriceRepository()
     val audioRecorderManager = AudioRecorderManager(appContext)
     val voskModelManager = VoskModelManager(appContext)
     val speechToTextEngine: SpeechToTextEngine = VoskSpeechToTextEngine(appContext, voskModelManager)

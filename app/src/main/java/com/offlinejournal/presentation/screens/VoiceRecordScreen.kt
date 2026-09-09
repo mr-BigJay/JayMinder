@@ -82,6 +82,7 @@ fun VoiceRecordScreen(
     onDismiss: () -> Unit,
     onSaved: () -> Unit,
     viewModel: NoteEditorViewModel = viewModel(
+        key = "voice_record_$categoryId",
         factory = NoteEditorViewModel.Factory(container, categoryId = categoryId)
     )
 ) {

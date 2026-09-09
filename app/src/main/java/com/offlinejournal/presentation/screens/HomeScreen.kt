@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
@@ -43,7 +44,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -83,6 +87,7 @@ import com.offlinejournal.presentation.theme.PurpleDark
 import com.offlinejournal.presentation.theme.PurplePrimary
 import com.offlinejournal.presentation.viewmodel.CategoriesViewModel
 import com.offlinejournal.presentation.viewmodel.HomeViewModel
+import com.offlinejournal.presentation.viewmodel.MarketPriceViewModel
 import com.offlinejournal.presentation.viewmodel.RemindersViewModel
 import com.offlinejournal.util.PersianFormatter
 import com.offlinejournal.util.TehranTime
@@ -100,14 +105,17 @@ fun HomeScreen(
     onEditReminder: (Long) -> Unit,
     homeViewModel: HomeViewModel = viewModel(factory = HomeViewModel.Factory(container)),
     categoriesViewModel: CategoriesViewModel = viewModel(factory = CategoriesViewModel.Factory(container)),
-    remindersViewModel: RemindersViewModel = viewModel(factory = RemindersViewModel.Factory(container))
+    remindersViewModel: RemindersViewModel = viewModel(factory = RemindersViewModel.Factory(container)),
+    marketPriceViewModel: MarketPriceViewModel = viewModel(factory = MarketPriceViewModel.Factory(container))
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(HomeTab.HOME) }
-    var voiceNoteStep by rememberSaveable { mutableStateOf(VoiceNoteStep.None) }
-    var voiceCategoryId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var voiceNoteStep by remember { mutableStateOf(VoiceNoteStep.None) }
+    var voiceCategoryId by remember { mutableStateOf<Long?>(null) }
+    var showCategoriesDialog by rememberSaveable { mutableStateOf(false) }
     val homeState by homeViewModel.uiState.collectAsState()
     val categories by categoriesViewModel.categories.collectAsState()
     val upcomingReminders by remindersViewModel.upcomingReminders.collectAsState()
+    val marketPrices by marketPriceViewModel.uiState.collectAsState()
 
     Scaffold(
         containerColor = NavyDark,
@@ -122,20 +130,21 @@ fun HomeScreen(
             HomeTab.HOME -> HomeDashboardContent(
                 modifier = Modifier.padding(padding),
                 homeState = homeState,
+                usdPriceText = marketPrices.usdText,
+                goldPriceText = marketPrices.goldText,
                 onNewVoiceNote = { voiceNoteStep = VoiceNoteStep.Category },
                 onNewReminder = onNewReminder,
                 onNoteClick = onNoteClick,
-                onAllNotesClick = onAllNotesClick,
+                onAllNotesClick = { selectedTab = HomeTab.NOTES },
                 onSearch = onSearch,
+                onOpenCategories = { showCategoriesDialog = true },
                 onEditReminder = onEditReminder,
                 formatReminderTime = homeViewModel::formatReminderTime,
                 formatReminderRelative = homeViewModel::formatReminderRelative
             )
-            HomeTab.CATEGORIES -> CategoriesTabContent(
-                modifier = Modifier.padding(padding),
-                categories = categories,
-                onDelete = categoriesViewModel::deleteCategory,
-                viewModel = categoriesViewModel
+            HomeTab.NOTES -> NotesTimelineScreen(
+                container = container,
+                modifier = Modifier.padding(padding)
             )
             HomeTab.REMINDERS -> RemindersTabContent(
                 modifier = Modifier.padding(padding),
@@ -159,6 +168,15 @@ fun HomeScreen(
         )
     }
 
+    if (showCategoriesDialog) {
+        CategoriesManageDialog(
+            categories = categories,
+            onDelete = categoriesViewModel::deleteCategory,
+            viewModel = categoriesViewModel,
+            onDismiss = { showCategoriesDialog = false }
+        )
+    }
+
     if (voiceNoteStep == VoiceNoteStep.Recording && voiceCategoryId != null) {
         VoiceRecordScreen(
             container = container,
@@ -179,11 +197,14 @@ fun HomeScreen(
 private fun HomeDashboardContent(
     modifier: Modifier = Modifier,
     homeState: com.offlinejournal.presentation.viewmodel.HomeUiState,
+    usdPriceText: String,
+    goldPriceText: String,
     onNewVoiceNote: () -> Unit,
     onNewReminder: () -> Unit,
     onNoteClick: (Long) -> Unit,
     onAllNotesClick: () -> Unit,
     onSearch: () -> Unit,
+    onOpenCategories: () -> Unit,
     onEditReminder: (Long) -> Unit,
     formatReminderTime: (Reminder) -> String,
     formatReminderRelative: (Reminder) -> String?
@@ -211,9 +232,15 @@ private fun HomeDashboardContent(
             DashboardHeader(
                 greetingDate = liveDate,
                 currentTime = liveTime,
+                usdPriceText = usdPriceText,
+                goldPriceText = goldPriceText,
                 menuExpanded = menuExpanded,
                 onMenuToggle = { menuExpanded = it },
                 onSearch = onSearch,
+                onOpenCategories = {
+                    menuExpanded = false
+                    onOpenCategories()
+                },
                 onNewVoiceNote = onNewVoiceNote,
                 onNewReminder = onNewReminder
             )
@@ -296,9 +323,12 @@ private fun HomeDashboardContent(
 private fun DashboardHeader(
     greetingDate: String,
     currentTime: String,
+    usdPriceText: String,
+    goldPriceText: String,
     menuExpanded: Boolean,
     onMenuToggle: (Boolean) -> Unit,
     onSearch: () -> Unit,
+    onOpenCategories: () -> Unit,
     onNewVoiceNote: () -> Unit,
     onNewReminder: () -> Unit
 ) {
@@ -306,7 +336,7 @@ private fun DashboardHeader(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(290.dp)
+                .height(320.dp)
         ) {
             MountainBackground()
 
@@ -343,6 +373,13 @@ private fun DashboardHeader(
                                 },
                                 leadingIcon = {
                                     Icon(Icons.Default.Search, contentDescription = null)
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("دسته‌بندی‌ها") },
+                                onClick = onOpenCategories,
+                                leadingIcon = {
+                                    Icon(Icons.Default.Category, contentDescription = null)
                                 }
                             )
                         }
@@ -398,7 +435,24 @@ private fun DashboardHeader(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = usdPriceText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFFA78BFA),
+                        fontSize = 11.sp
+                    )
+                    Text(
+                        text = goldPriceText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFFA78BFA),
+                        fontSize = 11.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
 
                 ShortcutCardsRow(
                     onNewReminder = onNewReminder,
@@ -650,6 +704,33 @@ private fun RecentNoteCard(
                 modifier = Modifier
                     .size(32.dp)
                     .align(Alignment.CenterVertically)
+            )
+        }
+    }
+}
+
+@Composable
+private fun CategoriesManageDialog(
+    categories: List<Category>,
+    onDelete: (Category) -> Unit,
+    viewModel: CategoriesViewModel,
+    onDismiss: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth(0.92f)
+                .padding(vertical = 24.dp),
+            shape = RoundedCornerShape(20.dp),
+            color = NavyDark
+        ) {
+            CategoriesTabContent(
+                categories = categories,
+                onDelete = onDelete,
+                viewModel = viewModel
             )
         }
     }
