@@ -179,14 +179,10 @@ fun NotesTimelineScreen(
 
     selectedNote?.let { note ->
         NoteDetailModal(
-            note = note,
-            categoryName = viewModel.categoryName(uiState.categories, note.categoryId),
-            durationMs = note.audioFilePath?.let { viewModel.getDurationMs(it) } ?: 0L,
-            onPlayAudio = { onComplete ->
-                note.audioFilePath?.let { viewModel.playAudio(it, onComplete) }
-            },
-            onStopAudio = viewModel::stopAudio,
-            onDismiss = { selectedNote = null }
+            container = container,
+            noteId = note.id,
+            onDismiss = { selectedNote = null },
+            onDeleted = { selectedNote = null }
         )
     }
 }
@@ -386,7 +382,7 @@ private fun TimelineNoteItem(
                 .clip(RoundedCornerShape(16.dp))
                 .background(NavyCard)
                 .border(1.dp, Color(0xFF2D3A52), RoundedCornerShape(16.dp))
-                .padding(horizontal = 8.dp, vertical = 12.dp),
+                .padding(start = 8.dp, end = 14.dp, top = 12.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onDetails) {
@@ -396,7 +392,7 @@ private fun TimelineNoteItem(
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .padding(horizontal = 4.dp)
+                    .padding(horizontal = 8.dp)
             ) {
                 Text(
                     text = noteTitle(note),
@@ -418,11 +414,17 @@ private fun TimelineNoteItem(
                 IconButton(
                     onClick = onPlay,
                     modifier = Modifier
-                        .size(36.dp)
+                        .padding(end = 4.dp)
+                        .size(40.dp)
                         .clip(CircleShape)
                         .background(PurplePrimary.copy(alpha = 0.2f))
                 ) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = "پخش", tint = PurplePrimary)
+                    Icon(
+                        Icons.Default.PlayArrow,
+                        contentDescription = "پخش",
+                        tint = PurplePrimary,
+                        modifier = Modifier.size(22.dp)
+                    )
                 }
             }
         }
