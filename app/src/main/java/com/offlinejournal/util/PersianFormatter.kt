@@ -19,6 +19,17 @@ object PersianFormatter {
 
     fun toPersianDigits(number: Int): String = toPersianDigits(number.toString())
 
+    /** Converts Persian/Arabic-Indic digits to ASCII 0-9 for parsing. */
+    fun normalizeToLatinDigits(input: String): String = buildString(input.length) {
+        input.forEach { char ->
+            when (char) {
+                in '0'..'9' -> append(char)
+                in '۰'..'۹' -> append('0' + (char - '۰'))
+                in '\u0660'..'\u0669' -> append('0' + (char - '\u0660'))
+            }
+        }
+    }
+
     fun formatJalaliDate(epochMillis: Long, includeWeekday: Boolean = false): String {
         val jalali = JalaliCalendar.fromMillis(epochMillis)
         val monthName = JalaliDate.monthName(jalali.month)

@@ -24,6 +24,8 @@ data class ReminderEditorUiState(
     val jalaliDay: Int = 0,
     val hour: Int = 9,
     val minute: Int = 0,
+    val dateFieldsResetKey: Int = 0,
+    val timeFieldsResetKey: Int = 0,
     val errorMessage: String? = null,
     val saved: Boolean = false
 )
@@ -99,7 +101,9 @@ class ReminderEditorViewModel(
                         jalaliMonth = jalali.month,
                         jalaliDay = jalali.day,
                         hour = zdt.hour,
-                        minute = zdt.minute
+                        minute = zdt.minute,
+                        dateFieldsResetKey = it.dateFieldsResetKey + 1,
+                        timeFieldsResetKey = it.timeFieldsResetKey + 1
                     )
                 }
             }
@@ -117,6 +121,30 @@ class ReminderEditorViewModel(
         val state = _uiState.value
         if (state.title.isBlank()) {
             _uiState.update { it.copy(errorMessage = "عنوان یادآوری الزامی است") }
+            return
+        }
+        if (state.jalaliYear < 1300 || state.jalaliYear > 1500) {
+            _uiState.update { it.copy(errorMessage = "سال شمسی معتبر نیست") }
+            return
+        }
+        if (state.jalaliMonth !in 1..12) {
+            _uiState.update { it.copy(errorMessage = "ماه باید بین ۱ تا ۱۲ باشد") }
+            return
+        }
+        val maxDay = com.offlinejournal.util.JalaliCalendar.daysInJalaliMonth(
+            state.jalaliYear,
+            state.jalaliMonth
+        )
+        if (state.jalaliDay !in 1..maxDay) {
+            _uiState.update { it.copy(errorMessage = "روز برای این ماه معتبر نیست") }
+            return
+        }
+        if (state.hour !in 0..23) {
+            _uiState.update { it.copy(errorMessage = "ساعت باید بین ۰ تا ۲۳ باشد") }
+            return
+        }
+        if (state.minute !in 0..59) {
+            _uiState.update { it.copy(errorMessage = "دقیقه باید بین ۰ تا ۵۹ باشد") }
             return
         }
 
