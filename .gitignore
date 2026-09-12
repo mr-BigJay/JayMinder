@@ -1,0 +1,16 @@
+*.iml
+.gradle
+/local.properties
+local.properties
+/.idea/
+.DS_Store
+/build
+app/build/
+/captures
+.externalNativeBuild
+.cxx
+# Keep app/schemas/
+
+# APKs are distributed via GitHub Releases, not committed to git
+releases/
+*.apk
