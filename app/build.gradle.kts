@@ -13,8 +13,8 @@ android {
         applicationId = "com.offlinejournal"
         minSdk = 26
         targetSdk = 34
-        versionCode = 15
-        versionName = "1.6.6"
+        versionCode = 16
+        versionName = "1.6.7"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -22,12 +22,19 @@ android {
         }
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = file("signing/jayminder-release.jks")
+            storePassword = "jayminder-release"
+            keyAlias = "jayminder"
+            keyPassword = "jayminder-release"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
-            // Sign release APK so it can be installed on devices (unsigned APKs fail with
-            // "package appears to be invalid"). Debug keystore is fine for direct distribution.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
