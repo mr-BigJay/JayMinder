@@ -13,8 +13,8 @@ android {
         applicationId = "com.offlinejournal"
         minSdk = 26
         targetSdk = 34
-        versionCode = 16
-        versionName = "1.6.7"
+        versionCode = 17
+        versionName = "1.6.8"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -29,6 +29,12 @@ android {
             keyAlias = "jayminder"
             keyPassword = "jayminder-release"
         }
+        create("legacyGithub") {
+            storeFile = file("signing/github-legacy-debug.jks")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
     }
 
     buildTypes {
@@ -39,6 +45,11 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+        create("legacyUpdate") {
+            initWith(getByName("release"))
+            matchingFallbacks += listOf("release", "debug")
+            signingConfig = signingConfigs.getByName("legacyGithub")
         }
     }
 
@@ -106,14 +117,30 @@ dependencies {
 afterEvaluate {
     tasks.named("assembleRelease") {
         doLast {
-            val version = android.defaultConfig.versionName
-            val outDir = layout.buildDirectory.dir("outputs/apk/release").get().asFile
-            val built = outDir.resolve("app-release.apk")
-            val named = outDir.resolve("JayMinder-v$version.apk")
-            if (built.exists()) {
-                built.copyTo(named, overwrite = true)
-                built.delete()
-            }
+            renameBuiltApk(
+                layout.buildDirectory.dir("outputs/apk/release").get().asFile,
+                "JayMinder-v${android.defaultConfig.versionName}.apk"
+            )
+        }
+    }
+    tasks.named("assembleLegacyUpdate") {
+        doLast {
+            renameBuiltApk(
+                layout.buildDirectory.dir("outputs/apk/legacyUpdate").get().asFile,
+                "JayMinder-v${android.defaultConfig.versionName}-legacy-update.apk"
+            )
+        }
+    }
+}
+
+private fun renameBuiltApk(outDir: java.io.File, targetName: String) {
+    val built = outDir.listFiles()?.firstOrNull { it.extension == "apk" && !it.name.startsWith("JayMinder") }
+        ?: outDir.resolve("app-release.apk")
+    val named = outDir.resolve(targetName)
+    if (built.exists()) {
+        built.copyTo(named, overwrite = true)
+        if (built.absolutePath != named.absolutePath) {
+            built.delete()
         }
     }
 }

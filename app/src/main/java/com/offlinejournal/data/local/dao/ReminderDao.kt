@@ -14,6 +14,9 @@ interface ReminderDao {
     @Query("SELECT * FROM reminders ORDER BY scheduledAtMillis ASC")
     fun observeAll(): Flow<List<ReminderEntity>>
 
+    @Query("SELECT * FROM reminders ORDER BY scheduledAtMillis ASC")
+    suspend fun getAllOnce(): List<ReminderEntity>
+
     @Query("SELECT * FROM reminders WHERE isCompleted = 0 ORDER BY scheduledAtMillis ASC")
     fun observeUpcoming(): Flow<List<ReminderEntity>>
 

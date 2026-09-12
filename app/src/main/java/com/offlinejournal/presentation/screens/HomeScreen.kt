@@ -33,6 +33,9 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Upload
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -46,6 +49,9 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.runtime.Composable
@@ -87,6 +93,7 @@ import com.offlinejournal.presentation.theme.NavyDark
 import com.offlinejournal.presentation.theme.NavySurface
 import com.offlinejournal.presentation.theme.PurpleDark
 import com.offlinejournal.presentation.theme.PurplePrimary
+import com.offlinejournal.presentation.viewmodel.BackupViewModel
 import com.offlinejournal.presentation.viewmodel.CategoriesViewModel
 import com.offlinejournal.presentation.viewmodel.HomeViewModel
 import com.offlinejournal.presentation.viewmodel.MarketPriceViewModel
@@ -108,9 +115,16 @@ fun HomeScreen(
     homeViewModel: HomeViewModel = viewModel(factory = HomeViewModel.Factory(container)),
     categoriesViewModel: CategoriesViewModel = viewModel(factory = CategoriesViewModel.Factory(container)),
     remindersViewModel: RemindersViewModel = viewModel(factory = RemindersViewModel.Factory(container)),
-    marketPriceViewModel: MarketPriceViewModel = viewModel(factory = MarketPriceViewModel.Factory(container))
+    marketPriceViewModel: MarketPriceViewModel = viewModel(factory = MarketPriceViewModel.Factory(container)),
+    backupViewModel: BackupViewModel = viewModel(factory = BackupViewModel.Factory(container))
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(HomeTab.HOME) }
+    val backupState by backupViewModel.uiState.collectAsState()
+    val importBackupLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) backupViewModel.importBackup(uri)
+    }
     var voiceNoteStep by remember { mutableStateOf(VoiceNoteStep.None) }
     var voiceCategoryId by remember { mutableStateOf<Long?>(null) }
     var showCategoriesDialog by rememberSaveable { mutableStateOf(false) }
@@ -146,7 +160,12 @@ fun HomeScreen(
                 formatNoteTime = homeViewModel::formatNoteTime,
                 categoryName = homeViewModel::categoryName,
                 onToggleNotePlayback = homeViewModel::toggleNotePlayback,
-                onStopAudio = homeViewModel::stopAudio
+                onStopAudio = homeViewModel::stopAudio,
+                onExportBackup = backupViewModel::exportBackup,
+                onImportBackup = {
+                    importBackupLauncher.launch(arrayOf("application/zip", "application/octet-stream"))
+                },
+                backupBusy = backupState.isBusy
             )
             HomeTab.NOTES -> NotesTimelineScreen(
                 container = container,
@@ -180,6 +199,19 @@ fun HomeScreen(
             onDelete = categoriesViewModel::deleteCategory,
             viewModel = categoriesViewModel,
             onDismiss = { showCategoriesDialog = false }
+        )
+    }
+
+    backupState.message?.let { message ->
+        AlertDialog(
+            onDismissRequest = backupViewModel::clearMessage,
+            title = { Text("پشتیبان داده") },
+            text = { Text(message) },
+            confirmButton = {
+                TextButton(onClick = backupViewModel::clearMessage) {
+                    Text("باشه")
+                }
+            }
         )
     }
 
@@ -217,7 +249,10 @@ private fun HomeDashboardContent(
     formatNoteTime: (Note) -> String,
     categoryName: (Long?) -> String?,
     onToggleNotePlayback: (Note) -> Unit,
-    onStopAudio: () -> Unit
+    onStopAudio: () -> Unit,
+    onExportBackup: () -> Unit,
+    onImportBackup: () -> Unit,
+    backupBusy: Boolean
 ) {
     var menuExpanded by rememberSaveable { mutableStateOf(false) }
     var selectedNote by remember { mutableStateOf<Note?>(null) }
@@ -253,7 +288,10 @@ private fun HomeDashboardContent(
                     onOpenCategories()
                 },
                 onNewVoiceNote = onNewVoiceNote,
-                onNewReminder = onNewReminder
+                onNewReminder = onNewReminder,
+                onExportBackup = onExportBackup,
+                onImportBackup = onImportBackup,
+                backupBusy = backupBusy
             )
         }
 
@@ -363,7 +401,10 @@ private fun DashboardHeader(
     onSearch: () -> Unit,
     onOpenCategories: () -> Unit,
     onNewVoiceNote: () -> Unit,
-    onNewReminder: () -> Unit
+    onNewReminder: () -> Unit,
+    onExportBackup: () -> Unit,
+    onImportBackup: () -> Unit,
+    backupBusy: Boolean
 ) {
     Box(modifier = Modifier.fillMaxWidth()) {
         Box(
@@ -413,6 +454,28 @@ private fun DashboardHeader(
                                 onClick = onOpenCategories,
                                 leadingIcon = {
                                     Icon(Icons.Default.Category, contentDescription = null)
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("پشتیبان‌گیری (دانلودها)") },
+                                enabled = !backupBusy,
+                                onClick = {
+                                    onMenuToggle(false)
+                                    onExportBackup()
+                                },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Download, contentDescription = null)
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("بازگردانی پشتیبان") },
+                                enabled = !backupBusy,
+                                onClick = {
+                                    onMenuToggle(false)
+                                    onImportBackup()
+                                },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Upload, contentDescription = null)
                                 }
                             )
                         }
