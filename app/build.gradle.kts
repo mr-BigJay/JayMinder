@@ -13,8 +13,8 @@ android {
         applicationId = "com.offlinejournal"
         minSdk = 26
         targetSdk = 34
-        versionCode = 14
-        versionName = "1.6.5"
+        versionCode = 15
+        versionName = "1.6.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -94,4 +94,19 @@ dependencies {
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
     androidTestImplementation(composeBom)
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+}
+
+afterEvaluate {
+    tasks.named("assembleRelease") {
+        doLast {
+            val version = android.defaultConfig.versionName
+            val outDir = layout.buildDirectory.dir("outputs/apk/release").get().asFile
+            val built = outDir.resolve("app-release.apk")
+            val named = outDir.resolve("JayMinder-v$version.apk")
+            if (built.exists()) {
+                built.copyTo(named, overwrite = true)
+                built.delete()
+            }
+        }
+    }
 }
