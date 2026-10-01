@@ -1,0 +1,9 @@
+# Copy to local.properties (gitignored). Do NOT commit real secrets.
+sdk.dir=/path/to/Android/sdk
+
+# Non-secret defaults (also configurable via gradle.properties or env at build time):
+# ARVAN_MODEL=<exact model id from GET /v1/models>
+# ARVAN_BASE_URL=https://api.arvancloudai.ir/v1
+
+# API key: set ARVAN_API_KEY in your shell for scripts/probe_arvan_gateway.sh
+# On device: enter the key once in Note Editor → AI mode (stored in DataStore only).

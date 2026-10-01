@@ -5,6 +5,8 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.offlinejournal.data.local.AppContainer
 import com.offlinejournal.domain.model.Category
+import com.offlinejournal.service.ai.TranscriptionPipelineMode
+import com.offlinejournal.service.ai.TranscriptionPipelineStatus
 import com.offlinejournal.service.speech.ModelInstallState
 import com.offlinejournal.service.speech.SpeechEngineState
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,6 +26,9 @@ data class NoteEditorUiState(
     val isTranscribing: Boolean = false,
     val speechState: SpeechEngineState = SpeechEngineState.NotInitialized,
     val modelState: ModelInstallState = ModelInstallState.NotInstalled,
+    val transcriptionMode: TranscriptionPipelineMode = TranscriptionPipelineMode.OFFLINE,
+    val pipelineStatus: TranscriptionPipelineStatus = TranscriptionPipelineStatus.Idle,
+    val aiApiKeyConfigured: Boolean = false,
     val isSaving: Boolean = false,
     val errorMessage: String? = null,
     val savedNoteId: Long? = null
@@ -57,7 +62,8 @@ class NoteEditorViewModel(
                     it.copy(
                         speechState = state,
                         transcription = if (state is SpeechEngineState.LivePartial) transcription else it.transcription,
-                        isTranscribing = state is SpeechEngineState.Transcribing
+                        isTranscribing = state is SpeechEngineState.Transcribing ||
+                            it.pipelineStatus is TranscriptionPipelineStatus.ConvertingSpeech
                     )
                 }
             }
@@ -66,6 +72,18 @@ class NoteEditorViewModel(
         viewModelScope.launch {
             container.speechToTextEngine.modelState.collect { modelState ->
                 _uiState.update { it.copy(modelState = modelState) }
+            }
+        }
+
+        viewModelScope.launch {
+            container.aiSettingsRepository.transcriptionMode.collect { mode ->
+                _uiState.update { it.copy(transcriptionMode = mode) }
+            }
+        }
+
+        viewModelScope.launch {
+            container.aiSettingsRepository.apiKey.collect { key ->
+                _uiState.update { it.copy(aiApiKeyConfigured = !key.isNullOrBlank()) }
             }
         }
 
@@ -95,6 +113,18 @@ class NoteEditorViewModel(
     fun updateTranscription(value: String) = _uiState.update { it.copy(transcription = value) }
     fun selectCategory(categoryId: Long?) = _uiState.update { it.copy(categoryId = categoryId) }
 
+    fun setTranscriptionMode(mode: TranscriptionPipelineMode) {
+        viewModelScope.launch {
+            container.aiSettingsRepository.setTranscriptionMode(mode)
+        }
+    }
+
+    fun saveAiApiKey(key: String) {
+        viewModelScope.launch {
+            container.aiSettingsRepository.setApiKey(key)
+        }
+    }
+
     fun prepareSpeechModel() {
         viewModelScope.launch {
             container.speechToTextEngine.ensureModelInstalled()
@@ -104,6 +134,12 @@ class NoteEditorViewModel(
 
     fun startRecording() {
         viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    pipelineStatus = TranscriptionPipelineStatus.Idle,
+                    errorMessage = null
+                )
+            }
             val modelReady = container.speechToTextEngine.ensureModelInstalled()
             if (modelReady.isSuccess) {
                 container.speechToTextEngine.startLiveRecognition()
@@ -146,27 +182,42 @@ class NoteEditorViewModel(
     }
 
     private suspend fun stopRecordingInternal() {
+        _uiState.update {
+            it.copy(
+                pipelineStatus = TranscriptionPipelineStatus.ConvertingSpeech,
+                isTranscribing = true,
+                errorMessage = null
+            )
+        }
+
         val file = container.audioRecorderManager.stopRecording()
         container.audioRecorderManager.setPcmListener(null)
 
-        var transcription = _uiState.value.transcription
+        var rawTranscription = _uiState.value.transcription
         if (container.speechToTextEngine.modelState.value is ModelInstallState.Installed) {
             val liveResult = container.speechToTextEngine.finishLiveRecognition()
             if (liveResult.isSuccess && liveResult.getOrDefault("").isNotBlank()) {
-                transcription = liveResult.getOrDefault("")
-            } else if (file != null && transcription.isBlank()) {
+                rawTranscription = liveResult.getOrDefault("")
+            } else if (file != null && rawTranscription.isBlank()) {
                 val fileResult = container.speechToTextEngine.transcribeFile(file.absolutePath)
                 if (fileResult.isSuccess) {
-                    transcription = fileResult.getOrDefault("")
+                    rawTranscription = fileResult.getOrDefault("")
                 }
             }
         }
+
+        val (finalTranscription, cleanupError) = container.transcriptionPipelineCoordinator
+            .finalizeTranscription(rawTranscription) { status ->
+                _uiState.update { state -> state.copy(pipelineStatus = status) }
+            }
 
         _uiState.update {
             it.copy(
                 isRecording = false,
                 audioFilePath = file?.absolutePath,
-                transcription = transcription
+                transcription = finalTranscription,
+                isTranscribing = false,
+                errorMessage = cleanupError
             )
         }
     }
@@ -175,7 +226,15 @@ class NoteEditorViewModel(
         container.audioRecorderManager.cancelRecording()
         container.audioRecorderManager.setPcmListener(null)
         container.speechToTextEngine.cancelLiveRecognition()
-        _uiState.update { it.copy(isRecording = false, audioFilePath = null, transcription = "") }
+        _uiState.update {
+            it.copy(
+                isRecording = false,
+                audioFilePath = null,
+                transcription = "",
+                pipelineStatus = TranscriptionPipelineStatus.Idle,
+                isTranscribing = false
+            )
+        }
     }
 
     fun playRecording() {
@@ -186,12 +245,19 @@ class NoteEditorViewModel(
     fun transcribeAudio() {
         val path = _uiState.value.audioFilePath ?: return
         viewModelScope.launch {
-            _uiState.update { it.copy(isTranscribing = true, errorMessage = null) }
+            _uiState.update {
+                it.copy(
+                    isTranscribing = true,
+                    errorMessage = null,
+                    pipelineStatus = TranscriptionPipelineStatus.ConvertingSpeech
+                )
+            }
             val modelResult = container.speechToTextEngine.ensureModelInstalled()
             if (modelResult.isFailure) {
                 _uiState.update {
                     it.copy(
                         isTranscribing = false,
+                        pipelineStatus = TranscriptionPipelineStatus.Idle,
                         errorMessage = modelResult.exceptionOrNull()?.message ?: "مدل آماده نیست"
                     )
                 }
@@ -199,19 +265,29 @@ class NoteEditorViewModel(
             }
 
             val result = container.speechToTextEngine.transcribeFile(path)
-            _uiState.update {
-                if (result.isSuccess) {
-                    it.copy(
-                        transcription = result.getOrDefault(""),
-                        isTranscribing = false
-                    )
-                } else {
+            if (result.isFailure) {
+                _uiState.update {
                     it.copy(
                         isTranscribing = false,
+                        pipelineStatus = TranscriptionPipelineStatus.Idle,
                         errorMessage = result.exceptionOrNull()?.message
                             ?: "تبدیل صدا به متن ناموفق بود"
                     )
                 }
+                return@launch
+            }
+
+            val raw = result.getOrDefault("")
+            val (finalText, cleanupError) = container.transcriptionPipelineCoordinator
+                .finalizeTranscription(raw) { status ->
+                    _uiState.update { state -> state.copy(pipelineStatus = status) }
+                }
+            _uiState.update {
+                it.copy(
+                    transcription = finalText,
+                    isTranscribing = false,
+                    errorMessage = cleanupError
+                )
             }
         }
     }

@@ -27,6 +27,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -36,10 +37,14 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -50,6 +55,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.offlinejournal.data.local.AppContainer
 import com.offlinejournal.presentation.components.JournalTopBar
 import com.offlinejournal.presentation.viewmodel.NoteEditorViewModel
+import com.offlinejournal.service.ai.TranscriptionPipelineMode
+import com.offlinejournal.service.ai.TranscriptionPipelineStatus
 import com.offlinejournal.service.speech.ModelInstallState
 import com.offlinejournal.service.speech.SpeechEngineState
 
@@ -67,6 +74,7 @@ fun NoteEditorScreen(
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
     val categoryName = uiState.categories.find { it.id == uiState.categoryId }?.name ?: "بدون دسته‌بندی"
+    var apiKeyDraft by rememberSaveable { mutableStateOf("") }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -166,6 +174,82 @@ fun NoteEditorScreen(
             )
 
             Text(text = "ضبط صدا", style = MaterialTheme.typography.titleMedium)
+
+            Text(text = "موتور تبدیل", style = MaterialTheme.typography.labelLarge)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = uiState.transcriptionMode == TranscriptionPipelineMode.OFFLINE,
+                    onClick = { viewModel.setTranscriptionMode(TranscriptionPipelineMode.OFFLINE) },
+                    label = { Text("Offline") }
+                )
+                FilterChip(
+                    selected = uiState.transcriptionMode == TranscriptionPipelineMode.AI,
+                    onClick = { viewModel.setTranscriptionMode(TranscriptionPipelineMode.AI) },
+                    label = { Text("AI") }
+                )
+            }
+            Text(
+                text = when (uiState.transcriptionMode) {
+                    TranscriptionPipelineMode.OFFLINE -> "Vosk → ذخیره"
+                    TranscriptionPipelineMode.AI -> "Vosk → ArvanCloud → ذخیره"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            if (uiState.transcriptionMode == TranscriptionPipelineMode.AI && !uiState.aiApiKeyConfigured) {
+                OutlinedTextField(
+                    value = apiKeyDraft,
+                    onValueChange = { apiKeyDraft = it },
+                    label = { Text("کلید API ArvanCloud") },
+                    supportingText = {
+                        Text("فقط روی دستگاه ذخیره می‌شود؛ در Git یا APK commit نمی‌شود.")
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    colors = fieldColors
+                )
+                TextButton(
+                    onClick = {
+                        viewModel.saveAiApiKey(apiKeyDraft)
+                        apiKeyDraft = ""
+                    },
+                    enabled = apiKeyDraft.isNotBlank()
+                ) {
+                    Text("ذخیره کلید API")
+                }
+            }
+
+            when (val pipeline = uiState.pipelineStatus) {
+                TranscriptionPipelineStatus.ConvertingSpeech -> {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp).padding(end = 8.dp))
+                        Text("در حال تبدیل صدا...")
+                    }
+                }
+                TranscriptionPipelineStatus.ImprovingText -> {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp).padding(end = 8.dp))
+                        Text("در حال بهبود متن...")
+                    }
+                }
+                TranscriptionPipelineStatus.Completed -> {
+                    Text(
+                        "تکمیل شد",
+                        color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+                is TranscriptionPipelineStatus.SmartCleanupUnavailable -> {
+                    Text(
+                        pipeline.message,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+                TranscriptionPipelineStatus.Idle -> Unit
+            }
 
             when (val modelState = uiState.modelState) {
                 is ModelInstallState.Installing -> {

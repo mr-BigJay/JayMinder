@@ -91,6 +91,27 @@ https://github.com/mr-BigJay/JayMinder/releases/latest
 
 همه داده‌ها در Room SQLite و فایل‌های صوتی در `files/recordings/` ذخیره می‌شوند.
 
+## بهبود متن با ArvanCloud AI (اختیاری)
+
+جریان **Offline**: Vosk → ذخیره در Room.
+
+جریان **AI**: Vosk (متن خام) → ArvanCloud GPT (اصلاح فارسی) → ذخیره در Room. در صورت خطا یا نبود اینترنت، **متن Vosk حفظ می‌شود**.
+
+| تنظیم | محل |
+|--------|-----|
+| `ARVAN_MODEL` | `gradle.properties` یا env هنگام build — **شناسه واقعی** از `GET /v1/models` |
+| `ARVAN_BASE_URL` | پیش‌فرض `https://api.arvancloudai.ir/v1` |
+| `ARVAN_API_KEY` | **فقط** env (اسکریپت probe) یا DataStore روی دستگاه — هرگز در Git/APK commit نشود |
+| `ARVAN_BACKEND_CLEANUP_URL` | اختیاری — proxy آینده بدون کلید در اپ |
+
+کشف Gateway:
+
+```bash
+export ARVAN_API_KEY='...'
+export ARVAN_MODEL='...'   # بعد از GET /models
+./scripts/probe_arvan_gateway.sh
+```
+
 ## فناوری‌ها
 
 - Kotlin · Jetpack Compose · Material 3

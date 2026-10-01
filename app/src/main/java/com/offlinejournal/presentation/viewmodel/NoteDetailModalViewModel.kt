@@ -116,20 +116,25 @@ class NoteDetailModalViewModel(
                 return@launch
             }
             val result = container.speechToTextEngine.transcribeFile(path)
-            _uiState.update {
-                if (result.isSuccess) {
-                    val newText = result.getOrDefault("")
-                    it.copy(
-                        transcription = newText,
-                        isTranscribing = false,
-                        hasChanges = computeHasChanges(it.title, it.textContent, newText)
-                    )
-                } else {
+            if (result.isFailure) {
+                _uiState.update {
                     it.copy(
                         isTranscribing = false,
                         errorMessage = result.exceptionOrNull()?.message ?: "تبدیل ناموفق بود"
                     )
                 }
+                return@launch
+            }
+            val raw = result.getOrDefault("")
+            val (finalText, cleanupError) = container.transcriptionPipelineCoordinator
+                .finalizeTranscription(raw) { }
+            _uiState.update {
+                it.copy(
+                    transcription = finalText,
+                    isTranscribing = false,
+                    errorMessage = cleanupError,
+                    hasChanges = computeHasChanges(it.title, it.textContent, finalText)
+                )
             }
         }
     }
