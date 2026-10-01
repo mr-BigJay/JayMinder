@@ -13,8 +13,32 @@ android {
         applicationId = "com.offlinejournal"
         minSdk = 26
         targetSdk = 34
-        versionCode = 17
-        versionName = "1.6.8"
+        versionCode = 18
+        versionName = "1.7.0"
+
+        val arvanBaseUrl = (
+            project.findProperty("ARVAN_BASE_URL") as String?
+                ?: System.getenv("ARVAN_BASE_URL")
+                ?: "https://api.arvancloudai.ir/v1"
+            ).trim()
+        val arvanModel = (
+            project.findProperty("ARVAN_MODEL") as String?
+                ?: System.getenv("ARVAN_MODEL")
+                ?: ""
+            ).trim()
+        val arvanBackendCleanupUrl = (
+            project.findProperty("ARVAN_BACKEND_CLEANUP_URL") as String?
+                ?: System.getenv("ARVAN_BACKEND_CLEANUP_URL")
+                ?: ""
+            ).trim()
+
+        buildConfigField("String", "ARVAN_BASE_URL", quoteBuildConfig(arvanBaseUrl))
+        buildConfigField("String", "ARVAN_MODEL", quoteBuildConfig(arvanModel))
+        buildConfigField(
+            "String",
+            "ARVAN_BACKEND_CLEANUP_URL",
+            quoteBuildConfig(arvanBackendCleanupUrl)
+        )
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -64,6 +88,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     packaging {
@@ -108,6 +133,7 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
     androidTestImplementation(composeBom)
@@ -132,6 +158,9 @@ afterEvaluate {
         }
     }
 }
+
+private fun quoteBuildConfig(value: String): String =
+    "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
 private fun renameBuiltApk(outDir: java.io.File, targetName: String) {
     val built = outDir.listFiles()?.firstOrNull { it.extension == "apk" && !it.name.startsWith("JayMinder") }
