@@ -124,7 +124,7 @@ fun NoteEditorScreen(
                 }
                 Button(
                     onClick = viewModel::saveNote,
-                    enabled = !uiState.isSaving,
+                    enabled = !uiState.isSaving && !uiState.isTranscribing && !uiState.isRecording,
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
@@ -297,6 +297,7 @@ fun NoteEditorScreen(
                     TextButton(onClick = viewModel::cancelRecording) { Text("لغو") }
                 } else {
                     FilledTonalButton(
+                        enabled = !uiState.isTranscribing,
                         onClick = {
                             val hasMic = ContextCompat.checkSelfPermission(
                                 context, Manifest.permission.RECORD_AUDIO
