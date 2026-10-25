@@ -13,8 +13,8 @@ android {
         applicationId = "com.offlinejournal"
         minSdk = 26
         targetSdk = 34
-        versionCode = 19
-        versionName = "1.8.0"
+        versionCode = 20
+        versionName = "1.8.1"
 
         val arvanBaseUrl = (
             project.findProperty("ARVAN_BASE_URL") as String?

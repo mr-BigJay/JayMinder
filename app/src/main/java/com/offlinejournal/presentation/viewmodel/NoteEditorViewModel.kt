@@ -29,6 +29,8 @@ data class NoteEditorUiState(
     val transcriptionMode: TranscriptionPipelineMode = TranscriptionPipelineMode.OFFLINE,
     val pipelineStatus: TranscriptionPipelineStatus = TranscriptionPipelineStatus.Idle,
     val cloudConfigured: Boolean = false,
+    val cloudDirect: Boolean = true,
+    val cloudModel: String = "gpt-transcribe",
     val aiApiKeyConfigured: Boolean = false,
     val isSaving: Boolean = false,
     val errorMessage: String? = null,
@@ -42,7 +44,11 @@ class NoteEditorViewModel(
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
-        NoteEditorUiState(categoryId = initialCategoryId, cloudConfigured = container.cloudSpeechSettings.read() != null)
+        NoteEditorUiState(categoryId = initialCategoryId).let { state ->
+            container.cloudSpeechSettings.read()?.let { config ->
+                state.copy(cloudConfigured = true, cloudDirect = config.direct, cloudModel = config.model)
+            } ?: state
+        }
     )
     val uiState: StateFlow<NoteEditorUiState> = _uiState.asStateFlow()
 
@@ -122,9 +128,21 @@ class NoteEditorViewModel(
 
     fun saveCloudSettings(endpoint: String, token: String) {
         runCatching { container.cloudSpeechSettings.save(endpoint, token) }.fold(
-            onSuccess = { _uiState.update { it.copy(cloudConfigured = true, errorMessage = null) } },
+            onSuccess = { _uiState.update { it.copy(cloudConfigured = true, cloudDirect = false, errorMessage = null) } },
             onFailure = { e -> _uiState.update { it.copy(errorMessage = e.message) } }
         )
+    }
+
+    fun saveDirectOpenAiKey(key: String, model: String) {
+        runCatching { container.cloudSpeechSettings.saveDirect(key, model) }.fold(
+            onSuccess = { _uiState.update { it.copy(cloudConfigured = true, cloudDirect = true, cloudModel = model.trim(), errorMessage = null) } },
+            onFailure = { e -> _uiState.update { it.copy(errorMessage = e.message) } }
+        )
+    }
+
+    fun clearCloudSettings() {
+        container.cloudSpeechSettings.clear()
+        _uiState.update { it.copy(cloudConfigured = false, errorMessage = null) }
     }
 
     fun saveAiApiKey(key: String) {

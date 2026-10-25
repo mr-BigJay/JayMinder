@@ -4,12 +4,12 @@ import com.offlinejournal.service.ai.CloudSpeechSettings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CancellationException
-import org.json.JSONObject
+import java.util.UUID
 import java.io.File
 import java.net.URL
 import javax.net.ssl.HttpsURLConnection
 
-/** Uploads the ORIGINAL recording, never the Vosk text. Provider key stays on server. */
+/** Sends original audio either directly to OpenAI or to the optional personal gateway. */
 class OpenAiSpeechClient(private val settings: CloudSpeechSettings) {
     suspend fun transcribe(path: String): Result<String> = withContext(Dispatchers.IO) {
         try {
@@ -18,7 +18,9 @@ class OpenAiSpeechClient(private val settings: CloudSpeechSettings) {
             require(file.isFile && file.length() in 45..(24L * 1024 * 1024)) {
                 "فایل صوتی خالی است یا از ۲۴ مگابایت بزرگ‌تر است"
             }
-            val conn = URL(config.endpoint).openConnection() as HttpsURLConnection
+            // A provider API key can only go to the fixed official endpoint, never to the proxy URL.
+            val endpoint = if (config.direct) "https://api.openai.com/v1/audio/transcriptions" else config.endpoint
+            val conn = URL(endpoint).openConnection() as HttpsURLConnection
             try {
                 conn.instanceFollowRedirects = false
                 conn.requestMethod = "POST"
@@ -26,21 +28,20 @@ class OpenAiSpeechClient(private val settings: CloudSpeechSettings) {
                 conn.readTimeout = 150000
                 conn.doOutput = true
                 conn.setRequestProperty("Authorization", "Bearer " + config.token)
-                conn.setRequestProperty("Content-Type", "audio/wav")
-                conn.setFixedLengthStreamingMode(file.length())
-                conn.outputStream.use { out -> file.inputStream().use { it.copyTo(out) } }
-                val code = conn.responseCode
-                require(code == 200) {
-                    when (code) {
-                        401 -> "توکن اتصال سرور نامعتبر است"
-                        413 -> "فایل صوتی بیش از حد بزرگ است"
-                        429 -> "سقف مصرف تبدیل صدا پر شده است"
-                        else -> "تبدیل آنلاین انجام نشد (HTTP $code)"
-                    }
+                if (config.direct) {
+                    val multipart = OpenAiMultipart(file, config.model, "JayMinder-" + UUID.randomUUID())
+                    conn.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + multipart.boundary)
+                    conn.setFixedLengthStreamingMode(multipart.contentLength)
+                    conn.outputStream.use { multipart.writeTo(it) }
+                } else {
+                    conn.setRequestProperty("Content-Type", "audio/wav")
+                    conn.setFixedLengthStreamingMode(file.length())
+                    conn.outputStream.use { out -> file.inputStream().use { it.copyTo(out) } }
                 }
+                val code = conn.responseCode
+                require(code == 200) { speechHttpError(code, config.direct) }
                 val text = conn.inputStream.bufferedReader().use { it.readText() }
-                val transcript = JSONObject(text).getString("text").trim()
-                require(transcript.isNotEmpty()) { "گفتار قابل تشخیصی دریافت نشد" }
+                val transcript = parseSpeechResponse(text)
                 Result.success(transcript)
             } finally { conn.disconnect() }
         } catch (e: CancellationException) { throw e }

@@ -75,6 +75,9 @@ fun NoteEditorScreen(
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
     val categoryName = uiState.categories.find { it.id == uiState.categoryId }?.name ?: "بدون دسته‌بندی"
+    var directConnection by rememberSaveable { mutableStateOf(uiState.cloudDirect) }
+    var directKeyDraft by remember { mutableStateOf("") }
+    var directModelDraft by rememberSaveable { mutableStateOf(uiState.cloudModel) }
     var cloudUrlDraft by rememberSaveable { mutableStateOf("") }
     var cloudTokenDraft by remember { mutableStateOf("") }
     var apiKeyDraft by rememberSaveable { mutableStateOf("") }
@@ -197,21 +200,51 @@ fun NoteEditorScreen(
                 label = { Text("OpenAI · تبدیل مستقیم صدا") }
             )
             if (uiState.transcriptionMode == TranscriptionPipelineMode.OPENAI) {
-                Text("با انتخاب این حالت، فایل صوتی برای تبدیل به سرور شما و OpenAI ارسال می‌شود. مصرف API هزینه دارد؛ آفلاین همچنان در دسترس است.")
-                Text(if (uiState.cloudConfigured) "اتصال ذخیره شده؛ برای تغییر، هر دو فیلد را وارد کنید." else "آدرس و توکن اتصال سرور را وارد کنید.")
-                OutlinedTextField(value = cloudUrlDraft, onValueChange = { cloudUrlDraft = it },
-                    label = { Text("آدرس کامل HTTPS تبدیل صدا") }, singleLine = true,
-                    modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = cloudTokenDraft, onValueChange = { cloudTokenDraft = it },
-                    label = { Text("توکن اتصال سرور (نه کلید OpenAI)") }, singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
-                TextButton(onClick = {
-                    viewModel.saveCloudSettings(cloudUrlDraft, cloudTokenDraft)
-                    cloudTokenDraft = ""
-                }, enabled = cloudUrlDraft.isNotBlank() && cloudTokenDraft.isNotBlank()) {
-                    Text("ذخیره اتصال")
+                Text("تبدیل صدا روی سرورهای OpenAI انجام می‌شود و به اینترنت و اعتبار API نیاز دارد. صوت برای پردازش ارسال می‌شود؛ متن روی گوشی ذخیره می‌شود.")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(selected = directConnection, onClick = { directConnection = true },
+                        label = { Text("اتصال مستقیم") })
+                    FilterChip(selected = !directConnection, onClick = { directConnection = false },
+                        label = { Text("سرور شخصی") })
+                }
+                if (uiState.cloudConfigured) {
+                    Text(if (uiState.cloudDirect) "اتصال ذخیره‌شده: مستقیم به OpenAI" else "اتصال ذخیره‌شده: سرور شخصی")
+                }
+                if (directConnection) {
+                    Text("کلید شخصی خود را وارد کنید؛ آدرس سرور لازم نیست. کلید روی این گوشی رمزگذاری می‌شود و داخل APK قرار نمی‌گیرد.")
+                    OutlinedTextField(value = directKeyDraft, onValueChange = { directKeyDraft = it },
+                        label = { Text("OpenAI API Key") }, singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = directModelDraft, onValueChange = { directModelDraft = it },
+                        label = { Text("مدل تبدیل گفتار") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    TextButton(onClick = {
+                        viewModel.saveDirectOpenAiKey(directKeyDraft, directModelDraft)
+                        directKeyDraft = ""
+                    }, enabled = directKeyDraft.isNotBlank() && directModelDraft.isNotBlank() && !uiState.isTranscribing) {
+                        Text("ذخیره اتصال مستقیم")
+                    }
+                } else {
+                    Text("برای اتصال از طریق سرور، آدرس و توکن سرور را ذخیره کنید.")
+                    OutlinedTextField(value = cloudUrlDraft, onValueChange = { cloudUrlDraft = it },
+                        label = { Text("آدرس کامل HTTPS تبدیل صدا") }, singleLine = true,
+                        modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = cloudTokenDraft, onValueChange = { cloudTokenDraft = it },
+                        label = { Text("توکن اتصال سرور (نه کلید OpenAI)") }, singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+                    TextButton(onClick = {
+                        viewModel.saveCloudSettings(cloudUrlDraft, cloudTokenDraft)
+                        cloudTokenDraft = ""
+                    }, enabled = cloudUrlDraft.isNotBlank() && cloudTokenDraft.isNotBlank() && !uiState.isTranscribing) {
+                        Text("ذخیره اتصال سرور")
+                    }
+                }
+                if (uiState.cloudConfigured) {
+                    TextButton(onClick = viewModel::clearCloudSettings, enabled = !uiState.isTranscribing) {
+                        Text("حذف کلید و اتصال ذخیره‌شده")
+                    }
                 }
             }
+
             Text(
                 text = when (uiState.transcriptionMode) {
                     TranscriptionPipelineMode.OFFLINE -> "Vosk → ذخیره"
