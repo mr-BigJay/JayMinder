@@ -102,38 +102,18 @@ class NoteDetailModalViewModel(
             transcription != originalTranscription
 
     fun regenerateTranscription() {
+        if (_uiState.value.isTranscribing) return
         val path = _uiState.value.note?.audioFilePath ?: return
         viewModelScope.launch {
             _uiState.update { it.copy(isTranscribing = true, errorMessage = null) }
-            val modelResult = container.speechToTextEngine.ensureModelInstalled()
-            if (modelResult.isFailure) {
-                _uiState.update {
-                    it.copy(
-                        isTranscribing = false,
-                        errorMessage = modelResult.exceptionOrNull()?.message ?: "مدل آماده نیست"
-                    )
-                }
-                return@launch
-            }
-            val result = container.speechToTextEngine.transcribeFile(path)
-            if (result.isFailure) {
-                _uiState.update {
-                    it.copy(
-                        isTranscribing = false,
-                        errorMessage = result.exceptionOrNull()?.message ?: "تبدیل ناموفق بود"
-                    )
-                }
-                return@launch
-            }
-            val raw = result.getOrDefault("")
             val (finalText, cleanupError) = container.transcriptionPipelineCoordinator
-                .finalizeTranscription(raw) { }
+                .transcribeFile(path) { }
             _uiState.update {
                 it.copy(
-                    transcription = finalText,
+                    transcription = finalText.ifBlank { it.transcription },
                     isTranscribing = false,
                     errorMessage = cleanupError,
-                    hasChanges = computeHasChanges(it.title, it.textContent, finalText)
+                    hasChanges = computeHasChanges(it.title, it.textContent, finalText.ifBlank { it.transcription })
                 )
             }
         }

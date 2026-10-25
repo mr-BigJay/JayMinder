@@ -14,3 +14,10 @@ app/build/
 # APKs are distributed via GitHub Releases, not committed to git
 releases/
 *.apk
+
+# Runtime credentials and transcription cache
+server/.env
+server/.venv/
+__pycache__/
+.pytest_cache/
+*.sqlite3

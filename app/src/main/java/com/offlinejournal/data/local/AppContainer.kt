@@ -50,6 +50,9 @@ class AppContainer(context: Context) {
     /** Reserved for future cloud STT providers. */
     val remoteSpeechToTextEngine: SpeechToTextEngine = RemoteSpeechToTextEngine()
 
+    val cloudSpeechSettings = com.offlinejournal.service.ai.CloudSpeechSettings(appContext)
+    val openAiSpeechClient = com.offlinejournal.service.speech.OpenAiSpeechClient(cloudSpeechSettings)
+
     val aiSettingsRepository = AiSettingsRepository(appContext)
     val arvanCloudAiClient = ArvanCloudAiClient(aiSettingsRepository)
     val aiTextCleanupEngine: AiTextCleanupEngine =

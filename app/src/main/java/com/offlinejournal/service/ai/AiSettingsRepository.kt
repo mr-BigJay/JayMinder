@@ -21,6 +21,7 @@ class AiSettingsRepository(private val context: Context) {
 
     val transcriptionMode: Flow<TranscriptionPipelineMode> = dataStore.data.map { prefs ->
         when (prefs[KEY_TRANSCRIPTION_MODE]) {
+            "openai" -> TranscriptionPipelineMode.OPENAI
             MODE_AI -> TranscriptionPipelineMode.AI
             else -> TranscriptionPipelineMode.OFFLINE
         }
@@ -43,6 +44,7 @@ class AiSettingsRepository(private val context: Context) {
             prefs[KEY_TRANSCRIPTION_MODE] = when (mode) {
                 TranscriptionPipelineMode.OFFLINE -> MODE_OFFLINE
                 TranscriptionPipelineMode.AI -> MODE_AI
+                TranscriptionPipelineMode.OPENAI -> "openai"
             }
         }
     }
