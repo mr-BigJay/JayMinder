@@ -74,6 +74,8 @@ fun NoteEditorScreen(
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
     val categoryName = uiState.categories.find { it.id == uiState.categoryId }?.name ?: "بدون دسته‌بندی"
+    var cloudUrlDraft by rememberSaveable { mutableStateOf("") }
+    var cloudTokenDraft by remember { mutableStateOf("") }
     var apiKeyDraft by rememberSaveable { mutableStateOf("") }
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -185,13 +187,35 @@ fun NoteEditorScreen(
                 FilterChip(
                     selected = uiState.transcriptionMode == TranscriptionPipelineMode.AI,
                     onClick = { viewModel.setTranscriptionMode(TranscriptionPipelineMode.AI) },
-                    label = { Text("AI") }
+                    label = { Text("Arvan") }
                 )
+            }
+            FilterChip(
+                selected = uiState.transcriptionMode == TranscriptionPipelineMode.OPENAI,
+                onClick = { viewModel.setTranscriptionMode(TranscriptionPipelineMode.OPENAI) },
+                label = { Text("OpenAI · تبدیل مستقیم صدا") }
+            )
+            if (uiState.transcriptionMode == TranscriptionPipelineMode.OPENAI) {
+                Text("با انتخاب این حالت، فایل صوتی برای تبدیل به سرور شما و OpenAI ارسال می‌شود. مصرف API هزینه دارد؛ آفلاین همچنان در دسترس است.")
+                Text(if (uiState.cloudConfigured) "اتصال ذخیره شده؛ برای تغییر، هر دو فیلد را وارد کنید." else "آدرس و توکن اتصال سرور را وارد کنید.")
+                OutlinedTextField(value = cloudUrlDraft, onValueChange = { cloudUrlDraft = it },
+                    label = { Text("آدرس کامل HTTPS تبدیل صدا") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = cloudTokenDraft, onValueChange = { cloudTokenDraft = it },
+                    label = { Text("توکن اتصال سرور (نه کلید OpenAI)") }, singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+                TextButton(onClick = {
+                    viewModel.saveCloudSettings(cloudUrlDraft, cloudTokenDraft)
+                    cloudTokenDraft = ""
+                }, enabled = cloudUrlDraft.isNotBlank() && cloudTokenDraft.isNotBlank()) {
+                    Text("ذخیره اتصال")
+                }
             }
             Text(
                 text = when (uiState.transcriptionMode) {
                     TranscriptionPipelineMode.OFFLINE -> "Vosk → ذخیره"
                     TranscriptionPipelineMode.AI -> "Vosk → ArvanCloud → ذخیره"
+                    TranscriptionPipelineMode.OPENAI -> "تبدیل فایل صوتی با OpenAI و ذخیره نتیجه"
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant

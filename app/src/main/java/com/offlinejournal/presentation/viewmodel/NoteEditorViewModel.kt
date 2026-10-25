@@ -28,6 +28,7 @@ data class NoteEditorUiState(
     val modelState: ModelInstallState = ModelInstallState.NotInstalled,
     val transcriptionMode: TranscriptionPipelineMode = TranscriptionPipelineMode.OFFLINE,
     val pipelineStatus: TranscriptionPipelineStatus = TranscriptionPipelineStatus.Idle,
+    val cloudConfigured: Boolean = false,
     val aiApiKeyConfigured: Boolean = false,
     val isSaving: Boolean = false,
     val errorMessage: String? = null,
@@ -41,7 +42,7 @@ class NoteEditorViewModel(
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
-        NoteEditorUiState(categoryId = initialCategoryId)
+        NoteEditorUiState(categoryId = initialCategoryId, cloudConfigured = container.cloudSpeechSettings.read() != null)
     )
     val uiState: StateFlow<NoteEditorUiState> = _uiState.asStateFlow()
 
@@ -119,6 +120,13 @@ class NoteEditorViewModel(
         }
     }
 
+    fun saveCloudSettings(endpoint: String, token: String) {
+        runCatching { container.cloudSpeechSettings.save(endpoint, token) }.fold(
+            onSuccess = { _uiState.update { it.copy(cloudConfigured = true, errorMessage = null) } },
+            onFailure = { e -> _uiState.update { it.copy(errorMessage = e.message) } }
+        )
+    }
+
     fun saveAiApiKey(key: String) {
         viewModelScope.launch {
             container.aiSettingsRepository.setApiKey(key)
@@ -133,6 +141,7 @@ class NoteEditorViewModel(
     }
 
     fun startRecording() {
+        if (_uiState.value.isTranscribing || _uiState.value.isRecording) return
         viewModelScope.launch {
             _uiState.update {
                 it.copy(
@@ -152,7 +161,7 @@ class NoteEditorViewModel(
 
             val result = container.audioRecorderManager.startRecording()
             if (result.isSuccess) {
-                _uiState.update { it.copy(isRecording = true, errorMessage = null) }
+                _uiState.update { it.copy(isRecording = true, transcription = "", errorMessage = null) }
             } else {
                 container.speechToTextEngine.cancelLiveRecognition()
                 _uiState.update {
@@ -163,12 +172,14 @@ class NoteEditorViewModel(
     }
 
     fun stopRecording() {
+        if (!_uiState.value.isRecording || _uiState.value.isTranscribing) return
         viewModelScope.launch {
             stopRecordingInternal()
         }
     }
 
     fun confirmAndSave() {
+        if (_uiState.value.isTranscribing) return
         viewModelScope.launch {
             if (_uiState.value.isRecording) {
                 stopRecordingInternal()
@@ -185,6 +196,7 @@ class NoteEditorViewModel(
         _uiState.update {
             it.copy(
                 pipelineStatus = TranscriptionPipelineStatus.ConvertingSpeech,
+                isRecording = false,
                 isTranscribing = true,
                 errorMessage = null
             )
@@ -207,7 +219,7 @@ class NoteEditorViewModel(
         }
 
         val (finalTranscription, cleanupError) = container.transcriptionPipelineCoordinator
-            .finalizeTranscription(rawTranscription) { status ->
+            .finalizeTranscription(rawTranscription, file?.absolutePath) { status ->
                 _uiState.update { state -> state.copy(pipelineStatus = status) }
             }
 
@@ -243,6 +255,7 @@ class NoteEditorViewModel(
     }
 
     fun transcribeAudio() {
+        if (_uiState.value.isTranscribing || _uiState.value.isRecording) return
         val path = _uiState.value.audioFilePath ?: return
         viewModelScope.launch {
             _uiState.update {
@@ -252,39 +265,13 @@ class NoteEditorViewModel(
                     pipelineStatus = TranscriptionPipelineStatus.ConvertingSpeech
                 )
             }
-            val modelResult = container.speechToTextEngine.ensureModelInstalled()
-            if (modelResult.isFailure) {
-                _uiState.update {
-                    it.copy(
-                        isTranscribing = false,
-                        pipelineStatus = TranscriptionPipelineStatus.Idle,
-                        errorMessage = modelResult.exceptionOrNull()?.message ?: "مدل آماده نیست"
-                    )
-                }
-                return@launch
-            }
-
-            val result = container.speechToTextEngine.transcribeFile(path)
-            if (result.isFailure) {
-                _uiState.update {
-                    it.copy(
-                        isTranscribing = false,
-                        pipelineStatus = TranscriptionPipelineStatus.Idle,
-                        errorMessage = result.exceptionOrNull()?.message
-                            ?: "تبدیل صدا به متن ناموفق بود"
-                    )
-                }
-                return@launch
-            }
-
-            val raw = result.getOrDefault("")
             val (finalText, cleanupError) = container.transcriptionPipelineCoordinator
-                .finalizeTranscription(raw) { status ->
+                .transcribeFile(path) { status ->
                     _uiState.update { state -> state.copy(pipelineStatus = status) }
                 }
             _uiState.update {
                 it.copy(
-                    transcription = finalText,
+                    transcription = finalText.ifBlank { it.transcription },
                     isTranscribing = false,
                     errorMessage = cleanupError
                 )
@@ -293,6 +280,7 @@ class NoteEditorViewModel(
     }
 
     fun saveNote() {
+        if (_uiState.value.isTranscribing || _uiState.value.isSaving) return
         val state = _uiState.value
         val content = state.transcription.ifBlank { state.textContent }
         if (content.isBlank() && state.audioFilePath == null) {
